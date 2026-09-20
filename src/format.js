@@ -94,3 +94,13 @@ export function batteryBlocks(code) {
 export function batteryBars(filled) {
   return Array.from({ length: BATTERY_BLOCKS }, (_, i) => i >= BATTERY_BLOCKS - filled);
 }
+
+// 0.005029 V -> "5.029 mV": an SI prefix and 4 significant digits, for reports.
+export function formatQuantity(v, unit = '', digits = 4) {
+  if (!Number.isFinite(v)) return '';
+  if (v === 0) return `0 ${unit}`.trim();
+  const rounded = Number(v.toPrecision(digits)); // round first: 0.99999999 V must read "1 V", not "1000 mV"
+  const abs = Math.abs(rounded);
+  const [exp, prefix] = ENG.reduce((pick, p) => (abs >= 10 ** p[0] ? p : pick), ENG[0]);
+  return `${Number((rounded / 10 ** exp).toPrecision(digits))} ${prefix}${unit}`.trim();
+}

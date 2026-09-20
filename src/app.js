@@ -2,9 +2,13 @@ import { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, pa
 import { LiveGraph } from './graph.js';
 import { localTimestamp, pointsToTable, pointsToText } from './graph-text.js';
 import { toCsv } from './csv.js';
+import { initForms } from './forms-ui.js';
 import { initMemory } from './memory-ui.js';
+import { ReadingsStore } from './readings.js';
+import { initReadings } from './readings-ui.js';
 import { Meter, MeterError } from './meter.js';
 import { initSettings } from './settings-ui.js';
+import { TemplateStore } from './templates.js';
 import { WebSerialTransport } from './transport.js';
 
 const $ = (id) => document.getElementById(id);
@@ -80,6 +84,8 @@ function setConnected(connected) {
 
 // Memory reads share the IR link with the live polling, so polling pauses while they run.
 let paused = false;
+let lastReading = null; // the reading on the display right now, for the report's readings table
+let meterInfo = null; // model, firmware, serial and owner fields of the last meter connected, for reports
 const memory = initMemory({
   counts: $('memoryCounts'),
   message: $('memoryMsg'),
@@ -121,6 +127,7 @@ async function connect({ choose = false } = {}) {
       poll();
       settings.load();
       memory.loadSummary();
+      loadMeterInfo(id, candidate);
     } catch (e) {
       await candidate.close();
       throw e;
@@ -138,8 +145,20 @@ async function connect({ choose = false } = {}) {
   }
 }
 
+async function loadMeterInfo(id, m) {
+  meterInfo = { model: id.model, firmware: id.firmware, serial: id.serial, owner: {} };
+  for (const field of ['company', 'site', 'operator', 'contact']) {
+    try {
+      meterInfo.owner[field] = await m.getOwnerField(field);
+    } catch {
+      break; // an older meter without these: the report just leaves them out
+    }
+  }
+}
+
 async function disconnect(message = 'Not connected', kind = '') {
   polling = false;
+  lastReading = null;
   const m = meter;
   meter = null;
   await m?.close();
@@ -220,11 +239,16 @@ function render(d) {
   const main = d.readings.PRIMARY ?? d.readings.LIVE;
   if (!main) return;
   const f = formatReading(main);
+  lastReading = {
+    t: Date.now(), function: prettyFunction(d.primaryFunction), text: `${f.text} ${f.unit}`.trim(),
+    value: main.value, unit: unitSymbol(main.baseUnit), state: main.state,
+  };
   $('value').textContent = f.text;
   $('unit').textContent = f.unit;
   $('coupling').textContent = f.coupling;
   $('func').textContent = prettyFunction(d.primaryFunction);
   $('miniValue').textContent = `${f.text} ${f.unit} ${f.coupling}`.trim();
+  $('navValue').textContent = $('miniValue').textContent;
   $('modes').textContent = d.modes.map(prettyFunction).join(' · ');
 
   const sec = d.readings.SECONDARY;
@@ -264,6 +288,7 @@ $('live').onclick = () => (graph.view === 'data' ? graph.showLive() : graph.jump
 $('viewLive').onclick = () => graph.showLive();
 $('viewData').onclick = () => graph.showData();
 $('clearGraph').onclick = clearGraph;
+$('graphToReport').onclick = copyGraphToReport;
 $('cursorClear').onclick = () => graph.clearCursors();
 
 $('yAuto').onclick = () => graph.setYAuto();
@@ -398,6 +423,11 @@ async function copyValues(all) {
   }
 }
 
+// Adds the graph (its cursor window, if set) to the report and says so under the graph.
+async function copyGraphToReport() {
+  graphMessage(await forms.copyGraph());
+}
+
 function clearGraph() {
   graph.clear(); // in the downloaded view this drops that dataset and returns to live
   showGraphView(graph.view);
@@ -431,6 +461,7 @@ function menuItems(timeHere) {
         { label: 'Copy all x,y values', note: scope, enabled: has, run: () => copyValues(true) },
       ]),
     { label: 'Copy image', note: cursors ? 'between cursors' : 'visible area', enabled: selected > 0, run: copyImage },
+    { label: 'Copy graph to report', note: scope, enabled: selected > 0, run: copyGraphToReport },
     { group: 'Cursors' },
     { label: 'Place start cursor here', enabled: has && timeHere != null, run: () => graph.placeCursor('start', timeHere) },
     { label: 'Place end cursor here', enabled: has && timeHere != null, run: () => graph.placeCursor('end', timeHere) },
@@ -523,6 +554,54 @@ $('graphScroll').addEventListener('copy', (e) => {
   graphMessage(`Copied ${points.length} x,y values`);
 });
 
+// ---- reports: what the graph shows becomes the report's data (the cursor window, if cursors are set)
+async function reportData() {
+  const points = graph.selectedPoints();
+  const canvas = graph.exportCanvas({ header: false });
+  let image = null;
+  if (canvas) {
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    image = new Uint8Array(await blob.arrayBuffer());
+  }
+  return {
+    meter: meterInfo,
+    section: {
+      title: $('graphTitle').textContent,
+      unit: graph.unit,
+      points,
+      total: graph.allPoints().length,
+      selection: graph.hasCursors,
+      image,
+    },
+  };
+}
+
+const forms = initForms({
+  store: new TemplateStore({ getItem: (k) => localStorage.getItem(k), setItem: (k, v) => localStorage.setItem(k, v) }),
+  getData: reportData,
+  getMeter: () => meterInfo,
+  els: {
+    paper: $('repPaper'), include: $('repInclude'), message: $('repMsg'),
+    exportButton: $('repExport'), previewButton: $('repPreview'), copyButton: $('repCopy'), resetButton: $('repReset'),
+  },
+});
+
+const readings = initReadings({
+  store: new ReadingsStore({ getItem: (k) => localStorage.getItem(k), setItem: (k, v) => localStorage.setItem(k, v) }),
+  getReading: () => lastReading,
+  onCopy: (rows) => forms.addTable(rows),
+  els: {
+    body: $('readingsBody'), count: $('readingsCount'), navCount: $('navCount'), saveButton: $('saveReading'), copyButton: $('readingsCopy'),
+    csvButton: $('readingsCsv'), clearButton: $('readingsClear'), message: $('readingsMsg'),
+  },
+});
+// The Save reading button and the report's instrument line follow the meter.
+setInterval(() => {
+  readings.refresh();
+  $('saveReadingNav').disabled = $('saveReading').disabled;
+  if ($('reportCard').open) forms.refresh();
+}, 1000);
+
 $('settingsReload').onclick = () => settings.load();
 
 // Collapsible cards remember whether they were open.
@@ -543,24 +622,73 @@ for (const card of document.querySelectorAll('details.collapsible')) {
   });
 }
 
-// Settings tabs (Meter / Owner & save slots / Reset & tools / Viewer).
-const tabs = [...document.querySelectorAll('[role=tab]')];
-function selectTab(tab) {
-  for (const t of tabs) {
-    const on = t === tab;
-    t.setAttribute('aria-selected', String(on));
-    t.tabIndex = on ? 0 : -1;
-    $(t.getAttribute('aria-controls')).hidden = !on;
-  }
+// Tabs (Settings, Reports): each tab list controls its own panels.
+function initTabs(list) {
+  const tabs = [...list.querySelectorAll('[role=tab]')];
+  const select = (tab) => {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      $(t.getAttribute('aria-controls')).hidden = !on;
+    }
+  };
+  tabs.forEach((tab, i) => {
+    tab.addEventListener('click', () => select(tab));
+    tab.addEventListener('keydown', (e) => {
+      const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+      if (next === undefined) return;
+      e.preventDefault();
+      const target = tabs[(next + tabs.length) % tabs.length];
+      select(target);
+      target.focus();
+    });
+  });
 }
-tabs.forEach((tab, i) => {
-  tab.addEventListener('click', () => selectTab(tab));
-  tab.addEventListener('keydown', (e) => {
-    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
-    if (next === undefined) return;
+document.querySelectorAll('[role=tablist]').forEach(initTabs);
+
+// ---- section bar: shortcut links that scroll to each section, highlighting the one you are in
+const sectionLinks = [...document.querySelectorAll('.section-tabs a')];
+const sectionPanels = sectionLinks.map((a) => document.getElementById(a.getAttribute('href').slice(1)));
+
+sectionLinks.forEach((link, i) => {
+  link.addEventListener('click', (e) => {
     e.preventDefault();
-    const target = tabs[(next + tabs.length) % tabs.length];
-    selectTab(target);
-    target.focus();
+    const card = sectionPanels[i].querySelector('details.collapsible');
+    if (card && !card.hidden) card.open = true; // a collapsed section opens when you jump to it
+    sectionPanels[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    history.replaceState(null, '', link.getAttribute('href'));
   });
 });
+
+let spyFrame = 0;
+function spySections() {
+  spyFrame = 0;
+  const line = document.querySelector('.sections').getBoundingClientRect().bottom + 24;
+  let current = 0;
+  sectionPanels.forEach((panel, i) => {
+    if (panel.getBoundingClientRect().top <= line) current = i;
+  });
+  sectionLinks.forEach((link, i) => {
+    link.classList.toggle('active', i === current);
+    if (i === current) link.setAttribute('aria-current', 'true');
+    else link.removeAttribute('aria-current');
+  });
+  // Once the Live section has scrolled out of view, its reading and Save button stay in the bar.
+  document.body.classList.toggle('live-away', sectionPanels[0].getBoundingClientRect().bottom < line - 24);
+}
+window.addEventListener('scroll', () => spyFrame || (spyFrame = requestAnimationFrame(spySections)), { passive: true });
+window.addEventListener('resize', spySections);
+
+// The bar sticks just below the site's own header, whatever height that has.
+function placeSectionBar() {
+  const header = document.getElementById('siteHeader');
+  const h = header ? Math.round(header.getBoundingClientRect().height) : 0;
+  document.documentElement.style.setProperty('--nav-top', `${header && getComputedStyle(header).position === 'sticky' ? h : 0}px`);
+  spySections();
+}
+placeSectionBar();
+window.addEventListener('resize', placeSectionBar);
+window.addEventListener('load', placeSectionBar);
+
+$('saveReadingNav').onclick = () => readings.add();

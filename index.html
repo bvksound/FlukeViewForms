@@ -76,18 +76,14 @@
   }
 
   /* page head + connection bar */
-  .page-head{padding:72px 0 8px;text-align:center;}
-  .page-head p{max-width:60ch;margin-left:auto;margin-right:auto;}
-  .device-logo{display:block;height:29px;width:auto;margin:0 auto 22px;border-radius:4px;}
-  .tool-bar{
-    display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;
-    margin:28px auto 8px;padding:16px 22px;max-width:760px;
-    background:var(--panel2);border:1px solid var(--border);border-radius:12px;
-  }
-  .status{
-    font-family:var(--mono);font-size:12px;border-radius:8px;padding:8px 12px;border:1px solid var(--border);
-    color:var(--muted);
-  }
+  .page-head{padding:18px 0 4px;}
+  .device-logo{display:block;height:45px;width:auto;border-radius:4px;flex:none;}
+  .head-row{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:12px 20px;}
+  .head-brand{display:flex;align-items:center;gap:14px;flex:none;}
+  .head-brand h1{margin:0;font-size:20px;white-space:nowrap;}
+  .tool-bar{display:flex;flex-wrap:nowrap;gap:8px;align-items:center;min-width:0;}
+  .tool-bar .btn{flex:none;}
+  .status{font-family:var(--mono);font-size:11px;border-radius:8px;padding:5px 9px;border:1px solid var(--border);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
   .status.ok{color:var(--green);border-color:rgba(53,208,127,.35);background:rgba(53,208,127,.07);}
   .status.warn{color:var(--amber);border-color:rgba(240,180,41,.35);background:rgba(240,180,41,.07);}
   .status.bad{color:var(--red);border-color:rgba(239,90,111,.35);background:rgba(239,90,111,.07);}
@@ -104,8 +100,7 @@
   .meta{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;
         font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);}
   /* Labels containing SI units (mV, µA, kΩ…) must keep their case; never text-transform them. */
-  #func,#modes,#graphTitle{text-transform:none;letter-spacing:.04em;font-size:13px;}
-  #func{color:var(--teal);}
+  #func{color:var(--teal);font-weight:600;}
   .battery{text-transform:none;letter-spacing:.04em;font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:8px;}
   .battery svg{width:34px;height:16px;display:block;}
   .battery.low{color:var(--red);}
@@ -127,12 +122,13 @@
   details.collapsible:first-child{margin-top:0;}
   details.collapsible > summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;}
   details.collapsible > summary::-webkit-details-marker{display:none;}
-  details.collapsible > summary::before{content:"\25B8";color:var(--muted2);font-size:12px;transition:transform .15s;}
-  details.collapsible[open] > summary::before{transform:rotate(90deg);}
-  details.collapsible > summary:hover::before{color:var(--teal);}
+  details.collapsible > summary::before{content:"";flex:none;width:24px;height:24px;border:1px solid var(--border);border-radius:7px;background:var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%238a97a1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat;transition:transform .15s,border-color .15s;transform:rotate(-90deg);}
+  details.collapsible[open] > summary::before{transform:rotate(0);}
+  details.collapsible > summary:hover::before{border-color:var(--teal);}
   details.collapsible > summary:focus-visible{outline:2px solid rgba(63,209,199,.4);outline-offset:6px;border-radius:6px;}
   .grow{flex:1;}
-  .meta .title{text-transform:none;letter-spacing:.04em;font-size:13px;color:var(--teal);}
+  .meta .title{font:600 16px/1.2 var(--sans);letter-spacing:0;text-transform:none;color:var(--text);}
+  .meta .sub{font-family:var(--mono);font-size:13px;letter-spacing:.03em;text-transform:none;color:var(--muted);}
   #miniValue,#memoryCounts,#graphCount{text-transform:none;font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:.02em;}
   #miniValue{color:var(--teal);font-weight:600;}
   details[open] > summary #miniValue{display:none;}
@@ -183,6 +179,94 @@
   #settingsMsg{font-family:var(--mono);font-size:12px;color:var(--muted);min-height:1.4em;margin-top:12px;}
   #settingsMsg.bad{color:var(--red);}
   @media (max-width:640px){.set-row{grid-template-columns:1fr auto;}.set-row label{grid-column:1/-1;}}
+  #repMsg.bad{color:var(--red);}
+  /* The report page: white paper, laid out like the PDF; you type straight into it. */
+  .paper{background:#fff;color:#10151a;border-radius:6px;padding:26px 32px 18px;max-width:780px;margin:14px auto 0;box-shadow:0 12px 40px -14px rgba(0,0,0,.7);
+    font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:14px;line-height:1.4;color-scheme:light;}
+  .paper input,.paper textarea,.paper select{background:transparent;border:none;border-bottom:1px dashed #cdd3d8;border-radius:0;color:#10151a;font:inherit;width:100%;padding:3px 0;}
+  .paper textarea{resize:vertical;border:1px dashed #cdd3d8;padding:4px 6px;}
+  .paper input:focus,.paper textarea:focus,.paper select:focus{outline:none;border-color:#0b7a75;box-shadow:none;}
+  .p-head{display:flex;gap:16px;align-items:flex-start;padding-bottom:12px;border-bottom:.75px solid #d5dadf;}
+  .p-fluke{width:120px;height:auto;border-radius:2px;flex:none;margin-top:4px;} /* 24 px logo centred on the 31 px title line */
+  .p-titles{flex:1;min-width:0;display:grid;gap:2px;}
+  .paper .p-title{font-size:22px;font-weight:700;}
+  .paper .p-subtitle{font-size:12px;color:#6b747c;}
+  .p-muted{color:#6b747c;font-size:12px;margin:0;}
+  .p-logo-slot{width:120px;flex:none;display:flex;justify-content:flex-end;align-items:center;min-height:31px;}
+  .p-add-logo{border:1px dashed #b7bec5;background:none;color:#6b747c;border-radius:6px;padding:8px 10px;cursor:pointer;font:inherit;font-size:12px;}
+  .p-add-logo:hover{border-color:#0b7a75;color:#0b7a75;}
+  .p-extra{position:relative;}
+  .p-extra img{max-width:110px;max-height:30px;cursor:pointer;display:block;}
+  .p-extra .p-x{position:absolute;top:-8px;right:-8px;}
+  .p-x{border:none;background:none;color:#9aa3ab;font-size:18px;line-height:1;cursor:pointer;padding:0 4px;}
+  .p-x:hover{color:#c0392b;}
+  .p-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;padding:16px 0 4px;}
+  .p-field{position:relative;}
+  .p-field.wide{grid-column:1/-1;}
+  .paper .p-label{font-size:10px;font-weight:700;letter-spacing:.04em;color:#6b747c;border-bottom-color:transparent;text-transform:uppercase;padding-right:120px;}
+  .p-fx{position:absolute;top:0;right:0;display:none;align-items:center;gap:2px;background:#fff;}
+  .p-field:hover .p-fx,.p-field:focus-within .p-fx{display:inline-flex;}
+  .paper .p-type{width:auto;font-size:11px;border:1px solid #cdd3d8;border-radius:4px;padding:1px 4px;}
+  .paper .p-options{font-size:12px;margin-top:4px;color:#6b747c;}
+  .p-addrow{display:flex;gap:8px;align-items:center;padding:6px 0 10px;}
+  .paper .p-addrow select{width:auto;border:1px solid #cdd3d8;border-radius:6px;padding:4px 8px;font-size:12px;}
+  .paper .btn{color:#10151a;border-color:#cdd3d8;}
+  .paper .btn:hover:not(:disabled){border-color:#0b7a75;}
+  .p-instrument{padding:2px 0 6px;font-size:11px;}
+  .p-section{padding-top:8px;}
+  .p-section-head{display:flex;justify-content:space-between;align-items:center;border-bottom:.75px solid #d5dadf;margin-bottom:8px;}
+  .p-section-head h3{margin:0;font-size:14px;color:#10151a;}
+  .p-graph{width:100%;display:block;border:1px solid #d5dadf;margin:8px 0;}
+  .save-reading{margin-left:auto;align-self:center;}
+  .r-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);}
+  .r-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .r-table th{text-align:left;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  .r-table td{padding:5px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .r-table tr:last-child td{border-bottom:none;}
+  .r-table .r-n{color:var(--muted2);font-family:var(--mono);width:1%;}
+  .r-table .r-time{font-family:var(--mono);color:var(--muted);white-space:nowrap;width:1%;}
+  .r-table .r-reading{font-family:var(--mono);font-weight:700;color:var(--teal);white-space:nowrap;width:1%;}
+  .r-table .r-reading.r-bad{color:var(--amber);}
+  .r-table input{width:100%;min-width:180px;background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 8px;color:var(--text);font:inherit;font-size:13px;}
+  .r-table input:hover{border-color:var(--border);}
+  .r-table input:focus{outline:none;border-color:var(--teal);background:var(--panel2);}
+  .r-table .r-empty{color:var(--muted2);padding:16px 10px;}
+  .r-table .p-x{font-size:18px;}
+  .p-element{padding-top:8px;margin-bottom:6px;}
+  .paper .p-desc{font-size:13px;margin:2px 0 4px;}
+  .p-table{width:100%;border-collapse:collapse;font-size:12px;margin:4px 0;}
+  .p-table th{text-align:left;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#6b747c;padding:4px 6px;border-bottom:.75px solid #d5dadf;}
+  .p-table td{padding:3px 6px;vertical-align:middle;}
+  .p-table tbody tr:nth-child(even){background:#f5f7f8;}
+  .p-table td:first-child{white-space:nowrap;color:#3a444c;width:1%;}
+  .p-table .p-reading{font-weight:700;white-space:nowrap;width:1%;}
+  .paper .p-table input{font-size:12px;}
+  .p-table-actions{padding:6px 0 4px;}
+  .p-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px 14px;padding:4px 0;}
+  .p-summary small{display:block;font-size:9.5px;font-weight:700;color:#6b747c;letter-spacing:.04em;text-transform:uppercase;}
+  .p-hint{color:#8a939b;font-size:12px;font-style:italic;margin:6px 0 0;}
+  .p-foot{display:flex;align-items:center;gap:10px;border-top:.75px solid #d5dadf;margin-top:18px;padding-top:10px;}
+  .p-bvk{width:22px;height:22px;flex:none;}
+  .p-footer-text{font-size:11px;flex:1;color:#6b747c;}
+  @media (max-width:640px){.p-fields{grid-template-columns:1fr;}.p-head{flex-wrap:wrap;}.paper{padding:18px;}}
+  /* section bar: sticks under the site header; only the selected section is shown */
+  .sections{position:sticky;top:var(--nav-top,0);z-index:40;background:rgba(10,14,18,.94);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);}
+  .sections-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .section-tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;min-width:0;}
+  .section-tabs::-webkit-scrollbar{display:none;}
+  .section-tabs a{border-bottom:2px solid transparent;padding:12px 14px;font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;white-space:nowrap;}
+  .section-tabs a:hover{color:var(--text);}
+  .section-tabs a.active{color:var(--teal);border-bottom-color:var(--teal);}
+  .section-tabs a:focus-visible{outline:2px solid rgba(63,209,199,.4);outline-offset:-4px;border-radius:6px;}
+  .badge{display:inline-block;min-width:18px;padding:0 6px;margin-left:4px;border-radius:9px;background:var(--panel2);border:1px solid var(--border);font-family:var(--mono);font-size:11px;line-height:17px;text-align:center;color:var(--muted);}
+  .nav-live{display:none;align-items:center;gap:10px;flex:none;}
+  .nav-value{font-family:var(--mono);font-weight:700;font-size:15px;color:var(--teal);white-space:nowrap;}
+  body.connected.live-away .nav-live{display:flex;}
+  .tab-panel{padding:0;}
+  .tab-panel > details.collapsible,.tab-panel > .card{margin-top:0;}
+  .tab-panel{scroll-margin-top:calc(var(--nav-top,0px) + 56px);margin-top:20px;}
+  .tab-panel:first-of-type{margin-top:0;}
+  @media (max-width:640px){.nav-value{display:none;}.section-tabs a{padding:12px 10px;font-size:13px;}}
   .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:16px 0 18px;border-bottom:1px solid var(--border);}
   .tabs button{background:none;border:none;border-bottom:2px solid transparent;padding:9px 14px;margin-bottom:-1px;font:inherit;font-size:14px;color:var(--muted);cursor:pointer;}
   .tabs button:hover{color:var(--text);}
@@ -230,8 +314,8 @@
   #count{font-family:var(--mono);font-size:12px;color:var(--muted2);}
   .foot-note{max-width:760px;margin:20px auto 0;font-size:13px;color:var(--muted2);text-align:center;}
 
-  @media (max-width:880px){.page-head{padding:52px 0 4px;}}
-  @media (max-width:480px){.wrap{padding:0 16px;}.card{padding:16px;}.tool-bar{padding:14px;}}
+  @media (max-width:900px){.head-row,.tool-bar{flex-wrap:wrap;}.head-brand h1{display:none;}}
+  @media (max-width:480px){.wrap{padding:0 16px;}.card{padding:16px;}.device-logo{height:36px;}}
 </style>
 </head>
 <body>
@@ -243,17 +327,18 @@
 
   <section class="page-head">
     <div class="wrap">
-      <img class="device-logo" src="images/fluke-seeklogo.svg" alt="Fluke" width="143" height="29">
-      <p class="eyebrow">Tools</p>
-      <h1>Fluke 287 Live Viewer</h1>
-      <p>Read a Fluke 287 through its IR cable, watch the display live, and record readings to CSV.
-        Everything runs in your browser — nothing is uploaded.</p>
-
-      <div class="tool-bar">
-        <button id="connect" class="btn btn-primary">Connect meter</button>
-        <button id="choose" class="btn btn-ghost" title="Pick a different serial port">Choose port…</button>
-        <button id="disconnect" class="btn btn-ghost" disabled>Disconnect</button>
-        <span id="status" class="status" role="status">Not connected</span>
+      <div class="head-row">
+        <div class="head-brand">
+          <img class="device-logo" src="images/fluke-seeklogo.svg" alt="Fluke" width="222" height="45">
+          <h1>Live Viewer</h1>
+        </div>
+        <div class="tool-bar">
+          <button id="connect" class="btn btn-primary btn-sm" title="Connect to the meter (uses the port you used last time)">Connect</button>
+          <button id="choose" class="btn btn-ghost btn-sm" title="Pick a different serial port">Port…</button>
+          <button id="disconnect" class="btn btn-ghost btn-sm" disabled>Disconnect</button>
+          <span id="status" class="status" role="status">Not connected</span>
+          <span id="battery" class="battery" hidden title="Meter battery level (QBL)"></span>
+        </div>
       </div>
       <p id="notice">
         This browser has no Web Serial support. Use Chrome, Edge or Opera on macOS, Windows or Linux
@@ -262,156 +347,221 @@
     </div>
   </section>
 
+  <nav class="sections" aria-label="Sections">
+    <div class="wrap sections-bar">
+      <div class="section-tabs">
+        <a href="#panel-live" class="active">Live Reading</a>
+        <a href="#panel-readings">Saved Readings <span class="badge" id="navCount">0</span></a>
+        <a href="#panel-graph">Graph</a>
+        <a href="#panel-memory">Meter Memory</a>
+        <a href="#panel-report">Report</a>
+        <a href="#panel-settings">Settings</a>
+      </div>
+      <div class="nav-live" id="navLive" aria-label="Live reading">
+        <span id="navValue" class="nav-value">----</span>
+        <button id="saveReadingNav" class="btn btn-primary btn-sm" disabled title="Adds the reading on the display right now to the Saved readings table">Save reading</button>
+      </div>
+    </div>
+  </nav>
+
   <section class="live" aria-label="Live view">
     <div class="wrap">
-      <details class="card collapsible" id="liveCard" open>
-        <summary class="meta"><span id="func">Live reading</span><span id="modes"></span><span class="grow"></span><span id="miniValue"></span><span id="battery" class="battery" hidden title="Meter battery level (QBL)"></span></summary>
-        <div class="readout stale" id="readout" aria-live="off">
-          <span id="value">----</span><span id="unit"></span><span id="coupling"></span>
-        </div>
-        <div id="secondary"></div>
-        <div class="stats" id="stats"></div>
-        <p class="hint" style="margin:14px 0 0">Everything is shown in the graph below first, live or from the meter's memory. Export it from there.</p>
-      </details>
+      <section class="tab-panel" id="panel-live" data-section="live">
+        <details class="card collapsible" id="liveCard" open>
+          <summary class="meta"><span class="title">Live Reading</span><span id="func" class="sub"></span><span id="modes" class="sub"></span><span class="grow"></span><span id="miniValue"></span></summary>
+          <div class="readout stale" id="readout" aria-live="off">
+            <span id="value">----</span><span id="unit"></span><span id="coupling"></span>
+            <button id="saveReading" class="btn btn-primary save-reading" disabled title="Adds the reading on the display right now to the Saved readings table">Save reading</button>
+          </div>
+          <div id="secondary"></div>
+          <div class="stats" id="stats"></div>
+          <p class="hint" style="margin:14px 0 0">Everything is shown in the Graph section first, live or from the meter's memory. Export it from there.</p>
+        </details>
+      </section>
 
-      <details class="card collapsible graph-card" id="graphCard" open>
-        <summary class="meta"><span id="graphTitle">Reading over time</span><span class="grow"></span><span id="graphCount"></span></summary>
-        <div class="controls" style="margin-top:12px">
-          <span class="seg" role="group" aria-label="Graph source">
-            <button id="viewLive" class="btn btn-ghost btn-sm" aria-pressed="true">Live</button>
-            <button id="viewData" class="btn btn-ghost btn-sm" aria-pressed="false" disabled title="Shows what you last downloaded from the meter's memory">Downloaded</button>
-          </span>
-          <span id="dataHint" class="hint">Read the meter's memory to plot saved measurements and recordings here.</span>
-        </div>
-        <div class="graph-scroll" id="graphScroll" tabindex="0" aria-label="Graph, scrolls horizontally">
-          <div class="graph-inner" id="graphInner"><canvas id="graph"></canvas></div>
-        </div>
-        <div class="controls">
-          <label>Zoom
-            <select id="zoom">
-              <option value="fit">Fit all</option>
-              <option value="0.05">0.05 px/s</option><option value="0.2">0.2 px/s</option>
-              <option value="1">1 px/s</option><option value="5">5 px/s</option>
-              <option value="20">20 px/s</option><option value="40" selected>40 px/s</option>
-              <option value="80">80 px/s</option><option value="160">160 px/s</option>
-            </select>
-          </label>
-          <button id="live" class="btn btn-ghost btn-sm" disabled>Jump to live</button>
-          <button id="clearGraph" class="btn btn-ghost btn-sm">Clear graph</button>
-          <span class="spacer"></span>
-          <span id="graphMsg" class="hint" role="status"></span>
-          <span class="hint">Right-click the graph (or press Shift+F10) to export, copy, add cursors and more.</span>
-        </div>
-        <div class="controls cursor-row" id="cursorRow" hidden>
-          <span class="cursor-swatch" aria-hidden="true"></span>
-          <span id="cursorInfo"></span>
-          <button id="cursorClear" class="btn btn-ghost btn-sm">Remove cursors</button>
-        </div>
-        <div class="controls">
-          <span class="ygroup">Y axis
-            <button id="yAuto" class="btn btn-ghost btn-sm" aria-pressed="true" title="Fit the visible data">Auto</button>
-            <input id="yMin" aria-label="Y minimum" inputmode="text" spellcheck="false" title="Minimum, e.g. -2, 5m, 1.5k">
-            to
-            <input id="yMax" aria-label="Y maximum" inputmode="text" spellcheck="false" title="Maximum, e.g. 10, 5m, 1.5k">
-            <span id="yUnit"></span>
-            <button id="yIn" class="btn btn-ghost btn-sm" title="Zoom in">Zoom +</button>
-            <button id="yOut" class="btn btn-ghost btn-sm" title="Zoom out">Zoom −</button>
-          </span>
-          <span class="hint">Drag the graph up or down to pan. Limits accept SI suffixes: 5m, 1.5k.</span>
-        </div>
-      </details>
+      <section class="tab-panel" id="panel-readings" data-section="readings">
+        <details class="card collapsible" id="readingsCard" open>
+          <summary class="meta"><span class="title">Saved Readings</span><span class="grow"></span><span id="readingsCount"></span></summary>
+          <p class="hint" style="margin:14px 0 10px">Each press of Save reading adds a row with the time, function and reading. Give each one a description, then export the table or copy it to the report.</p>
+          <div class="r-scroll">
+            <table class="r-table">
+              <thead><tr><th>#</th><th>Time</th><th>Function</th><th>Reading</th><th>Description</th><th></th></tr></thead>
+              <tbody id="readingsBody"></tbody>
+            </table>
+          </div>
+          <div class="controls">
+            <button id="readingsCopy" class="btn btn-ghost btn-sm" title="Adds this table to the report as a table element" disabled>Copy table to report</button>
+            <button id="readingsCsv" class="btn btn-ghost btn-sm" disabled>Export CSV</button>
+            <button id="readingsClear" class="btn btn-ghost btn-sm" disabled>Clear all</button>
+            <span id="readingsMsg" class="hint" role="status"></span>
+          </div>
+        </details>
+      </section>
+
+      <section class="tab-panel" id="panel-graph" data-section="graph">
+        <details class="card collapsible graph-card" id="graphCard" open>
+          <summary class="meta"><span class="title">Graph</span><span id="graphTitle" class="sub">Reading over time</span><span class="grow"></span><span id="graphCount"></span></summary>
+          <div class="controls" style="margin-top:12px">
+            <span class="seg" role="group" aria-label="Graph source">
+              <button id="viewLive" class="btn btn-ghost btn-sm" aria-pressed="true">Live</button>
+              <button id="viewData" class="btn btn-ghost btn-sm" aria-pressed="false" disabled title="Shows what you last downloaded from the meter's memory">Downloaded</button>
+            </span>
+            <span id="dataHint" class="hint">Read the meter's memory to plot saved measurements and recordings here.</span>
+          </div>
+          <div class="graph-scroll" id="graphScroll" tabindex="0" aria-label="Graph, scrolls horizontally">
+            <div class="graph-inner" id="graphInner"><canvas id="graph"></canvas></div>
+          </div>
+          <div class="controls">
+            <label>Zoom
+              <select id="zoom">
+                <option value="fit">Fit all</option>
+                <option value="0.05">0.05 px/s</option><option value="0.2">0.2 px/s</option>
+                <option value="1">1 px/s</option><option value="5">5 px/s</option>
+                <option value="20">20 px/s</option><option value="40" selected>40 px/s</option>
+                <option value="80">80 px/s</option><option value="160">160 px/s</option>
+              </select>
+            </label>
+            <button id="live" class="btn btn-ghost btn-sm" disabled>Jump to live</button>
+            <button id="clearGraph" class="btn btn-ghost btn-sm">Clear graph</button>
+            <button id="graphToReport" class="btn btn-ghost btn-sm" title="Adds the graph as it is now (with its cursors) to the report">Copy graph to report</button>
+            <span class="spacer"></span>
+            <span id="graphMsg" class="hint" role="status"></span>
+            <span class="hint">Right-click the graph (or press Shift+F10) to export, copy, add cursors and more.</span>
+          </div>
+          <div class="controls cursor-row" id="cursorRow" hidden>
+            <span class="cursor-swatch" aria-hidden="true"></span>
+            <span id="cursorInfo"></span>
+            <button id="cursorClear" class="btn btn-ghost btn-sm">Remove cursors</button>
+          </div>
+          <div class="controls">
+            <span class="ygroup">Y axis
+              <button id="yAuto" class="btn btn-ghost btn-sm" aria-pressed="true" title="Fit the visible data">Auto</button>
+              <input id="yMin" aria-label="Y minimum" inputmode="text" spellcheck="false" title="Minimum, e.g. -2, 5m, 1.5k">
+              to
+              <input id="yMax" aria-label="Y maximum" inputmode="text" spellcheck="false" title="Maximum, e.g. 10, 5m, 1.5k">
+              <span id="yUnit"></span>
+              <button id="yIn" class="btn btn-ghost btn-sm" title="Zoom in">Zoom +</button>
+              <button id="yOut" class="btn btn-ghost btn-sm" title="Zoom out">Zoom −</button>
+            </span>
+            <span class="hint">Drag the graph up or down to pan. Limits accept SI suffixes: 5m, 1.5k.</span>
+          </div>
+        </details>
+      </section>
 
       <div id="graphMenu" class="ctx" role="menu" aria-label="Graph" hidden></div>
 
-      <details class="card collapsible memory" id="memoryCard" open hidden>
-        <summary class="meta"><span class="title">Meter memory</span><span class="grow"></span><span id="memoryCounts"></span></summary>
-        <p class="hint" style="margin:14px 0 12px">Reads what is stored on the meter: saved measurements, min/max and peak sessions, and recordings.
-          Use View in graph to plot saved measurements, a recording or a min/max or peak session in the graph above, where it can be exported. Read-only: nothing on the meter is changed or erased.</p>
-        <div class="controls" style="margin-top:0">
-          <button id="memoryRead" class="btn btn-primary btn-sm">Read memory</button>
-          <button id="memoryView" class="btn btn-ghost btn-sm" disabled title="Plot the saved measurements in the graph above (replaces what the graph shows now)">View saved measurements in graph</button>
-          <span id="memoryMsg" class="hint" role="status"></span>
-        </div>
-        <div id="memoryBody"></div>
-      </details>
-
-      <details class="card collapsible settings" id="settingsCard" open>
-        <summary class="meta"><span class="title">Settings</span><span class="grow"></span><span id="settingsState"></span></summary>
-        <div class="tabs" role="tablist" aria-label="Settings sections">
-          <button role="tab" id="tab-meter" aria-controls="panel-meter" aria-selected="true">Meter</button>
-          <button role="tab" id="tab-owner" aria-controls="panel-owner" aria-selected="false" tabindex="-1">Owner &amp; save slots</button>
-          <button role="tab" id="tab-tools" aria-controls="panel-tools" aria-selected="false" tabindex="-1">Reset &amp; tools</button>
-          <button role="tab" id="tab-viewer" aria-controls="panel-viewer" aria-selected="false" tabindex="-1">Viewer</button>
-        </div>
-
-        <div role="tabpanel" id="panel-meter" aria-labelledby="tab-meter">
-          <p class="hint offline-note">Connect a meter to read and change its settings.</p>
-          <div class="meter-only">
-            <div class="controls" style="margin-top:0"><button id="settingsReload" class="btn btn-ghost btn-sm">Read again</button></div>
-            <h4 class="sub">Clock &amp; display</h4><div id="setDisplay" class="set-grid"></div>
-            <h4 class="sub">Power &amp; sound</h4><div id="setPower" class="set-grid"></div>
-            <h4 class="sub">Measurement</h4><div id="setMeasure" class="set-grid"></div>
+      <section class="tab-panel" id="panel-memory" data-section="memory">
+        <div id="memoryOffline" class="card offline-note"><div class="meta"><span class="title">Meter Memory</span></div><p class="hint" style="margin:12px 0 0">Connect a meter to read what is stored on it.</p></div>
+        <details class="card collapsible memory" id="memoryCard" open hidden>
+          <summary class="meta"><span class="title">Meter Memory</span><span class="grow"></span><span id="memoryCounts"></span></summary>
+          <p class="hint" style="margin:14px 0 12px">Reads what is stored on the meter: saved measurements, min/max and peak sessions, and recordings.
+            Use View in graph to plot saved measurements, a recording or a min/max or peak session in the Graph section, where it can be exported. Read-only: nothing on the meter is changed or erased.</p>
+          <div class="controls" style="margin-top:0">
+            <button id="memoryRead" class="btn btn-primary btn-sm">Read memory</button>
+            <button id="memoryView" class="btn btn-ghost btn-sm" disabled title="Plot the saved measurements in the graph (replaces what the graph shows now)">View saved measurements in graph</button>
+            <span id="memoryMsg" class="hint" role="status"></span>
           </div>
-        </div>
+          <div id="memoryBody"></div>
+        </details>
+      </section>
 
-        <div role="tabpanel" id="panel-owner" aria-labelledby="tab-owner" hidden>
-          <p class="hint offline-note">Connect a meter to read and change its owner details and save-slot names.</p>
-          <div class="meter-only">
-            <h4 class="sub">Owner</h4><div id="setOwner" class="set-grid"></div>
-            <h4 class="sub">Save slots</h4><div id="setSlots" class="set-grid"></div>
+      <section class="tab-panel" id="panel-report" data-section="report">
+        <details class="card collapsible" id="reportCard" open>
+          <summary class="meta"><span class="title">Report</span><span class="grow"></span><span id="reportState"></span></summary>
+          <p class="hint" style="margin:14px 0 12px">Build a PDF report on the page below. Fill in the fields, add a logo if you like, then add what belongs in it:
+            a copy of the graph (live or from the meter's memory, only the cursor window if you set cursors) and/or the Saved readings table, each with a description.
+            The fields and logo are remembered for next time.</p>
+          <div class="controls" style="margin-top:0">
+            <button id="repExport" class="btn btn-primary btn-sm">Export PDF</button>
+            <button id="repPreview" class="btn btn-ghost btn-sm" title="Build the PDF and open it in a new tab">Open PDF in a new tab</button>
+            <button id="repCopy" class="btn btn-ghost btn-sm" title="Adds the graph as it is now (with its cursors) to the report; do it again for more graphs">Copy graph to report</button>
+            <button id="repReset" class="btn btn-ghost btn-sm" title="Back to the built-in page">Reset page</button>
+            <span id="repMsg" class="hint" role="status"></span>
           </div>
-        </div>
+          <div id="repInclude" class="controls"></div>
+          <div id="repPaper" class="paper"></div>
+        </details>
+      </section>
 
-        <div role="tabpanel" id="panel-tools" aria-labelledby="tab-tools" hidden>
-          <p class="hint offline-note">Connect a meter to use the reset and raw command tools.</p>
-          <div class="meter-only">
-            <h4 class="sub">Reset</h4>
-            <div class="adv-grid">
-              <div class="adv-item">
-                <strong>Default setup</strong>
-                <p>Resets the Hz trigger edge, pulse width and duty cycle polarity, and the continuity beeper. Does not touch other settings.</p>
-                <button id="advDS" class="btn btn-ghost btn-sm needs-meter" disabled>Default setup</button>
-              </div>
-              <div class="adv-item danger">
-                <strong>Reset meter properties</strong>
-                <p>Same as <em>Reset Setup</em> on the meter's front-panel Setup menu.</p>
-                <button id="advRMP" class="btn btn-ghost btn-sm needs-meter" disabled>Reset properties…</button>
-              </div>
-              <div class="adv-item danger">
-                <strong>Reset instrument</strong>
-                <p>Restores all meter settings to factory defaults (calibration is kept). Same as <em>Reset Meter</em> in Setup.</p>
-                <button id="advRI" class="btn btn-ghost btn-sm needs-meter" disabled>Reset instrument…</button>
-              </div>
-            </div>
-            <div id="advResult" role="status"></div>
-            <h4 class="sub">Raw command</h4>
-            <div class="raw" style="margin-top:0;border-top:none;padding-top:0">
-              <p class="hint" style="margin:0 0 12px">Send any command to the meter and see every reply line. Commands end with a carriage return automatically.
-                Commands the public Fluke spec doesn't document may change meter settings, so use with care.</p>
-              <form id="rawForm">
-                <input id="rawCmd" autocomplete="off" spellcheck="false" placeholder="e.g. ID or QM" aria-label="Raw command">
-                <button id="rawSend" class="btn btn-ghost btn-sm needs-meter" disabled>Send</button>
-              </form>
-              <pre id="rawLog" aria-live="polite" hidden></pre>
+      <section class="tab-panel" id="panel-settings" data-section="settings">
+        <details class="card collapsible settings" id="settingsCard" open>
+          <summary class="meta"><span class="title">Settings</span><span class="grow"></span><span id="settingsState"></span></summary>
+          <div class="tabs" role="tablist" aria-label="Settings sections">
+            <button role="tab" id="tab-meter" aria-controls="panel-meter" aria-selected="true">Meter</button>
+            <button role="tab" id="tab-owner" aria-controls="panel-owner" aria-selected="false" tabindex="-1">Owner &amp; save slots</button>
+            <button role="tab" id="tab-tools" aria-controls="panel-tools" aria-selected="false" tabindex="-1">Reset &amp; tools</button>
+            <button role="tab" id="tab-viewer" aria-controls="panel-viewer" aria-selected="false" tabindex="-1">Viewer</button>
+          </div>
+
+          <div role="tabpanel" id="panel-meter" aria-labelledby="tab-meter">
+            <p class="hint offline-note">Connect a meter to read and change its settings.</p>
+            <div class="meter-only">
+              <div class="controls" style="margin-top:0"><button id="settingsReload" class="btn btn-ghost btn-sm">Read again</button></div>
+              <h4 class="sub">Clock &amp; display</h4><div id="setDisplay" class="set-grid"></div>
+              <h4 class="sub">Power &amp; sound</h4><div id="setPower" class="set-grid"></div>
+              <h4 class="sub">Measurement</h4><div id="setMeasure" class="set-grid"></div>
             </div>
           </div>
-        </div>
 
-        <div role="tabpanel" id="panel-viewer" aria-labelledby="tab-viewer" hidden>
-          <h4 class="sub">Live polling</h4>
-          <div class="set-row">
-            <label for="interval">Poll the meter every<small>live reading and graph</small></label>
-            <select id="interval">
-              <option value="250">0.25 s</option><option value="500" selected>0.5 s</option>
-              <option value="1000">1 s</option><option value="5000">5 s</option>
-            </select>
-            <span></span>
+          <div role="tabpanel" id="panel-owner" aria-labelledby="tab-owner" hidden>
+            <p class="hint offline-note">Connect a meter to read and change its owner details and save-slot names.</p>
+            <div class="meter-only">
+              <h4 class="sub">Owner</h4><div id="setOwner" class="set-grid"></div>
+              <h4 class="sub">Save slots</h4><div id="setSlots" class="set-grid"></div>
+            </div>
           </div>
-          <p class="hint">Faster polling gives a smoother graph but keeps the IR link busy. Memory reads pause polling while they run.</p>
-        </div>
 
-        <div id="settingsMsg" role="status"></div>
-      </details>
+          <div role="tabpanel" id="panel-tools" aria-labelledby="tab-tools" hidden>
+            <p class="hint offline-note">Connect a meter to use the reset and raw command tools.</p>
+            <div class="meter-only">
+              <h4 class="sub">Reset</h4>
+              <div class="adv-grid">
+                <div class="adv-item">
+                  <strong>Default setup</strong>
+                  <p>Resets the Hz trigger edge, pulse width and duty cycle polarity, and the continuity beeper. Does not touch other settings.</p>
+                  <button id="advDS" class="btn btn-ghost btn-sm needs-meter" disabled>Default setup</button>
+                </div>
+                <div class="adv-item danger">
+                  <strong>Reset meter properties</strong>
+                  <p>Same as <em>Reset Setup</em> on the meter's front-panel Setup menu.</p>
+                  <button id="advRMP" class="btn btn-ghost btn-sm needs-meter" disabled>Reset properties…</button>
+                </div>
+                <div class="adv-item danger">
+                  <strong>Reset instrument</strong>
+                  <p>Restores all meter settings to factory defaults (calibration is kept). Same as <em>Reset Meter</em> in Setup.</p>
+                  <button id="advRI" class="btn btn-ghost btn-sm needs-meter" disabled>Reset instrument…</button>
+                </div>
+              </div>
+              <div id="advResult" role="status"></div>
+              <h4 class="sub">Raw command</h4>
+              <div class="raw" style="margin-top:0;border-top:none;padding-top:0">
+                <p class="hint" style="margin:0 0 12px">Send any command to the meter and see every reply line. Commands end with a carriage return automatically.
+                  Commands the public Fluke spec doesn't document may change meter settings, so use with care.</p>
+                <form id="rawForm">
+                  <input id="rawCmd" autocomplete="off" spellcheck="false" placeholder="e.g. ID or QM" aria-label="Raw command">
+                  <button id="rawSend" class="btn btn-ghost btn-sm needs-meter" disabled>Send</button>
+                </form>
+                <pre id="rawLog" aria-live="polite" hidden></pre>
+              </div>
+            </div>
+          </div>
+
+          <div role="tabpanel" id="panel-viewer" aria-labelledby="tab-viewer" hidden>
+            <h4 class="sub">Live polling</h4>
+            <div class="set-row">
+              <label for="interval">Poll the meter every<small>live reading and graph</small></label>
+              <select id="interval">
+                <option value="250">0.25 s</option><option value="500" selected>0.5 s</option>
+                <option value="1000">1 s</option><option value="5000">5 s</option>
+              </select>
+              <span></span>
+            </div>
+            <p class="hint">Faster polling gives a smoother graph but keeps the IR link busy. Memory reads pause polling while they run.</p>
+          </div>
+
+          <div id="settingsMsg" role="status"></div>
+        </details>
+      </section>
 
       <p class="foot-note">Needs the Fluke IR-to-USB cable (IR189USB or compatible) and Chrome, Edge or Opera.
         Open source under the MIT license. Not affiliated with Fluke Corporation.</p>

@@ -637,11 +637,11 @@ export class LiveGraph {
 
   // Renders a print-friendly image (white background, title strip on top): the window between the cursors when
   // they are set, otherwise what is on screen. Returns a canvas, or null when there is no data yet.
-  exportCanvas({ title = '', subtitle = '', scale = 2 } = {}) {
+  exportCanvas({ title = '', subtitle = '', scale = 2, header = true } = {}) {
     const W = this.#scroll.clientWidth;
     const H = this.#inner.clientHeight;
     if (!this.#points.length || !W || !H) return null;
-    const HEAD = 46;
+    const HEAD = header ? 46 : 0; // reports draw their own title, so they ask for the plain plot
     const out = document.createElement('canvas');
     out.width = Math.round(W * scale);
     out.height = Math.round((H + HEAD) * scale);
@@ -662,6 +662,7 @@ export class LiveGraph {
     const span = this.#paint(g, W, H, PRINT_COLORS, false, view);
     g.restore();
 
+    if (!header) return out;
     g.textBaseline = 'alphabetic';
     g.textAlign = 'left';
     g.fillStyle = PRINT_COLORS.title;

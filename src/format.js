@@ -89,3 +89,8 @@ export function batteryBlocks(code) {
   const m = /^PARTLY_EMPTY_(\d)$/.exec(c);
   return m ? Math.min(Number(m[1]), BATTERY_BLOCKS - 1) : null;
 }
+
+// Which of the four bars are lit. The meter's symbol empties from the terminal (left) side, so the lit bars are the last ones.
+export function batteryBars(filled) {
+  return Array.from({ length: BATTERY_BLOCKS }, (_, i) => i >= BATTERY_BLOCKS - filled);
+}

@@ -1,4 +1,4 @@
-import { BATTERY_BLOCKS, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
+import { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
 import { LiveGraph } from './graph.js';
 import { Meter, MeterError } from './meter.js';
 import { initSettings } from './settings-ui.js';
@@ -119,9 +119,9 @@ function batteryIcon(filled) {
   };
   rect(0, 5, 3, 6, { rx: 1, fill: 'currentColor' }); // terminal
   rect(4.75, 0.75, 28.5, 14.5, { rx: 2.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 });
-  for (let i = 0; i < BATTERY_BLOCKS; i++) {
-    rect(8 + i * 6, 4, 4, 8, { rx: 0.8, fill: 'currentColor', opacity: i < filled ? 1 : 0.15 });
-  }
+  batteryBars(filled).forEach((lit, i) => {
+    rect(8 + i * 6, 4, 4, 8, { rx: 0.8, fill: 'currentColor', opacity: lit ? 1 : 0.15 });
+  });
   return svg;
 }
 
@@ -134,7 +134,7 @@ async function updateBattery() {
     const el = $('battery');
     el.hidden = false;
     el.classList.toggle('low', bars === 0);
-    el.title = `Battery: ${formatBattery(code)}${bars === null ? '' : ` (${bars} of ${BATTERY_BLOCKS} bars)`}`;
+    el.title = `Battery: ${formatBattery(code)}${bars === null ? '' : ` (${bars} of 4 bars)`}`;
     el.setAttribute('aria-label', el.title);
     el.replaceChildren(bars === null ? `Battery: ${formatBattery(code)}` : batteryIcon(bars));
   } catch (e) {

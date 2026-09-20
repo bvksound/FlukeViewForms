@@ -414,7 +414,12 @@ function batteryBlocks(code) {
   return m ? Math.min(Number(m[1]), BATTERY_BLOCKS - 1) : null;
 }
 
-  return { unitSymbol, formatReading, prettyFunction, formatEng, parseEng, formatBattery, BATTERY_BLOCKS, batteryBlocks };
+// Which of the four bars are lit. The meter's symbol empties from the terminal (left) side, so the lit bars are the last ones.
+function batteryBars(filled) {
+  return Array.from({ length: BATTERY_BLOCKS }, (_, i) => i >= BATTERY_BLOCKS - filled);
+}
+
+  return { unitSymbol, formatReading, prettyFunction, formatEng, parseEng, formatBattery, BATTERY_BLOCKS, batteryBlocks, batteryBars };
 })();
 
 __modules["graph"] = (() => {
@@ -1408,7 +1413,7 @@ function initSettings({ basic, advanced, message, getMeter }) {
 })();
 
 __modules["app"] = (() => {
-  const { BATTERY_BLOCKS, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } = __modules["format"];
+  const { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } = __modules["format"];
   const { LiveGraph } = __modules["graph"];
   const { Meter, MeterError } = __modules["meter"];
   const { initSettings } = __modules["settings-ui"];
@@ -1529,9 +1534,9 @@ function batteryIcon(filled) {
   };
   rect(0, 5, 3, 6, { rx: 1, fill: 'currentColor' }); // terminal
   rect(4.75, 0.75, 28.5, 14.5, { rx: 2.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 });
-  for (let i = 0; i < BATTERY_BLOCKS; i++) {
-    rect(8 + i * 6, 4, 4, 8, { rx: 0.8, fill: 'currentColor', opacity: i < filled ? 1 : 0.15 });
-  }
+  batteryBars(filled).forEach((lit, i) => {
+    rect(8 + i * 6, 4, 4, 8, { rx: 0.8, fill: 'currentColor', opacity: lit ? 1 : 0.15 });
+  });
   return svg;
 }
 
@@ -1544,7 +1549,7 @@ async function updateBattery() {
     const el = $('battery');
     el.hidden = false;
     el.classList.toggle('low', bars === 0);
-    el.title = `Battery: ${formatBattery(code)}${bars === null ? '' : ` (${bars} of ${BATTERY_BLOCKS} bars)`}`;
+    el.title = `Battery: ${formatBattery(code)}${bars === null ? '' : ` (${bars} of 4 bars)`}`;
     el.setAttribute('aria-label', el.title);
     el.replaceChildren(bars === null ? `Battery: ${formatBattery(code)}` : batteryIcon(bars));
   } catch (e) {

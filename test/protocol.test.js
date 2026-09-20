@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction } from '../src/format.js';
+import { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction } from '../src/format.js';
 import { Meter, MeterError } from '../src/meter.js';
 import { MockTransport } from './mock-meter.js';
 import { ProtocolError, parseAck, parseId, parseQdda, parseQm } from '../src/protocol.js';
@@ -95,6 +95,12 @@ test('batteryBlocks maps the meter wording to bars', () => {
   assert.equal(batteryBlocks('PARTLY_EMPTY_1'), 1);
   assert.equal(batteryBlocks('EMPTY'), 0);
   assert.equal(batteryBlocks('SOMETHING_NEW'), null);
+});
+
+test('batteryBars lights the bars from the right, like the meter', () => {
+  assert.deepEqual(batteryBars(2), [false, false, true, true]);
+  assert.deepEqual(batteryBars(4), [true, true, true, true]);
+  assert.deepEqual(batteryBars(0), [false, false, false, false]);
 });
 
 test('formatEng / parseEng round-trip axis limits', () => {

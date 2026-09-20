@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlukeView Forms Open — Fluke 287</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --panel: #fff; --text: #1c1c1a; --muted: #6b6b66; --line: #dcdcd6;
+    --accent: #f5b800; --accent-text: #1c1c1a; --danger: #c0392b; --trace: #1c6fd1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --panel: #212120; --text: #ecece8; --muted: #9a9a94; --line: #3a3a37; --trace: #5aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+           padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  h1 { font-size: 16px; margin: 0; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  button, select { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line);
+                   background: var(--panel); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  #notice { display: none; color: var(--danger); }
+  #status { color: var(--muted); }
+  .readout { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  #value { font: 600 clamp(48px, 14vw, 96px)/1 ui-monospace, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  #unit { font-size: clamp(22px, 6vw, 40px); }
+  #coupling, #func, #secondary, #modes { color: var(--muted); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 12px; }
+  .stats div { border-top: 1px solid var(--line); padding-top: 6px; }
+  .stats small { display: block; color: var(--muted); }
+  canvas { width: 100%; height: 140px; display: block; margin-top: 12px; }
+  .stale { opacity: .4; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FlukeView Forms Open <span style="color:var(--muted)">· Fluke 287</span></h1>
+  <div class="row">
+    <span id="status">Not connected</span>
+    <button id="connect" class="primary">Connect meter</button>
+    <button id="demo">Demo meter</button>
+    <button id="disconnect" disabled>Disconnect</button>
+  </div>
+</header>
+<main>
+  <p id="notice" class="panel">
+    This browser has no Web Serial support. Use Chrome, Edge or Opera on macOS, Windows or Linux
+    (Firefox and Safari can't talk to serial ports). The page must be served from https:// or http://localhost.
+  </p>
+
+  <section class="panel" aria-label="Live view">
+    <div class="row" style="justify-content: space-between">
+      <span id="func"></span>
+      <span id="modes"></span>
+    </div>
+    <div class="readout" id="readout" aria-live="off">
+      <span id="value">----</span><span id="unit"></span><span id="coupling"></span>
+    </div>
+    <div id="secondary"></div>
+    <div class="stats" id="stats"></div>
+    <canvas id="trace" aria-label="Recent readings"></canvas>
+    <div class="row" style="margin-top: 12px">
+      <label>Poll every
+        <select id="interval">
+          <option value="250">0.25 s</option><option value="500" selected>0.5 s</option>
+          <option value="1000">1 s</option><option value="5000">5 s</option>
+        </select>
+      </label>
+      <button id="record" disabled>Record</button>
+      <button id="export" disabled>Export CSV</button>
+      <span id="count" style="color: var(--muted)"></span>
+    </div>
+  </section>
+</main>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>

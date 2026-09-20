@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatBattery, formatEng, formatReading, parseEng, prettyFunction } from '../src/format.js';
+import { batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction } from '../src/format.js';
 import { Meter, MeterError } from '../src/meter.js';
 import { MockTransport } from './mock-meter.js';
 import { ProtocolError, parseAck, parseId, parseQdda, parseQm } from '../src/protocol.js';
+import { clockValueFor, localClockText, meterClockToText, minutesToSeconds, secondsToMinutes } from '../src/settings.js';
 import { LineBuffer, TimeoutError } from '../src/transport.js';
 
 // Examples taken from the Fluke 289/287 Remote Interface Specification.
@@ -88,6 +89,14 @@ test('formatBattery keeps the meter wording', () => {
   assert.equal(formatBattery('EMPTY\r'), 'Empty');
 });
 
+test('batteryBlocks maps the meter wording to bars', () => {
+  assert.equal(batteryBlocks('FULL'), 4);
+  assert.equal(batteryBlocks('PARTLY_EMPTY_2'), 2);
+  assert.equal(batteryBlocks('PARTLY_EMPTY_1'), 1);
+  assert.equal(batteryBlocks('EMPTY'), 0);
+  assert.equal(batteryBlocks('SOMETHING_NEW'), null);
+});
+
 test('formatEng / parseEng round-trip axis limits', () => {
   assert.equal(formatEng(0.00503), '5.03m');
   assert.equal(formatEng(1500), '1.5k');
@@ -141,4 +150,31 @@ test('Meter.raw returns every reply line, and bad commands still answer', async 
   const meter = new Meter(new MockTransport());
   assert.deepEqual(await meter.raw('ID', { settleMs: 60 }), ['0', 'FLUKE 287,V1.00,00000000']);
   assert.deepEqual(await meter.raw('NOPE', { settleMs: 60 }), ['1']);
+});
+
+test('settings helpers: minutes and the meter clock (local time encoded as UTC)', () => {
+  assert.equal(secondsToMinutes('900'), 15);
+  assert.equal(minutesToSeconds(35), 2100);
+  assert.equal(meterClockToText(1789918816), '2026-09-20 15:40:16');
+  // Whatever the machine's timezone, syncing shows the same wall-clock time that the computer shows.
+  const d = new Date(2026, 8, 20, 9, 5, 7);
+  assert.equal(meterClockToText(clockValueFor(d)), '2026-09-20 09:05:07');
+  assert.equal(localClockText(d), '2026-09-20 09:05:07');
+});
+
+test('Meter reads and writes properties, owner fields and save names', async () => {
+  const meter = new Meter(new MockTransport());
+  assert.equal(await meter.getProperty('beeper'), 'ON');
+  await meter.setProperty('beeper', 'OFF');
+  assert.equal(await meter.getProperty('beeper'), 'OFF');
+  await assert.rejects(meter.getProperty('nope'), MeterError);
+  await assert.rejects(meter.setProperty('lang', 'FRENCH'), MeterError);
+  assert.equal(await meter.getOwnerField('company'), 'ACME');
+  await meter.setOwnerField('company', 'BVK Sound');
+  assert.equal(await meter.getOwnerField('company'), 'BVK Sound');
+  await assert.rejects(meter.setOwnerField('company', "O'Neil"), /quotes/);
+  assert.equal(await meter.getSaveName(1), 'Site 1');
+  await meter.setSaveName(2, 'Bench');
+  assert.equal(await meter.getSaveName(2), 'Bench');
+  await assert.rejects(meter.getSaveName(7), MeterError);
 });

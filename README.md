@@ -13,8 +13,12 @@ npm test           # protocol parser + mock-meter tests, no dependencies
 Open the page in **Chrome, Edge or Opera** (macOS, Windows, Linux). Web Serial is not available in Firefox or Safari.
 The page must be served from `https://` or `http://localhost`.
 
-To publish inside a BVKsound-style website (shared header, logo, Tools menu), run
-`scripts/sync-website.sh /path/to/website`. It copies the page as `Fluke287.html` plus `fluke287/src/`.
+To publish, build one self-contained file and upload it next to your site's `site-nav.js` and `images/logo.png`:
+
+```sh
+node scripts/build.mjs          # writes dist/Fluke287.html (modules and Fluke logo inlined)
+scripts/sync-website.sh /path/to/website   # builds and copies it into a local website folder
+```
 
 ## Status
 
@@ -23,10 +27,11 @@ To publish inside a BVKsound-style website (shared header, logo, Tools menu), ru
 | Live view (`ID`, `QM`, `QDDA`) | Working on a real 287 (firmware V1.16) |
 | Scrollable live graph, Y-axis auto/manual/zoom/pan | Working (tested against a fake serial port; verify on the meter) |
 | Remembered port, auto-connect | Working |
+| Battery level (four-bar icon) | Working |
+| Meter settings panel (clock sync, beeper, digits, timeouts, formats, owner fields, save slots) | Working; write syntax verified on a real 287 |
 | Advanced: default setup, resets, raw command box | Working; resets not yet run on a real meter |
 | Record + CSV export | Working |
-| Set / read settings | Only `DS`, `RI`, `RMP` are documented; the rest needs protocol capture |
-| Read meter memory (saved measurements, logging sessions) | Not in the public spec; needs protocol capture |
+| Read meter memory (saved measurements, recordings) | Commands known from open-source tools (see docs/protocol.md), not built yet |
 | Form templates (logo, title, fields) | Planned: JSON templates in IndexedDB |
 | PDF export | Planned: client-side (pdf-lib or jsPDF) |
 
@@ -43,8 +48,11 @@ src/protocol.js   pure parsers (ID, QM, QDDA)
 src/meter.js      request/response client with a command queue
 src/transport.js  Web Serial transport + line buffer
 src/format.js     LCD-style formatting
+src/settings.js   settings definitions and clock helpers
+src/settings-ui.js the Meter settings panel
+src/graph.js      scrollable live graph
 test/             node:test suites (mock-meter.js is a fake 287 used by the tests)
-scripts/          dev-server.mjs (serves site header/logo from the website folder), sync-website.sh
+scripts/          dev-server.mjs (serves site header/logo from the website folder), build.mjs, sync-website.sh
 images/           Fluke logo
 ```
 

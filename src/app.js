@@ -1,6 +1,7 @@
-import { formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
+import { BATTERY_BLOCKS, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
 import { LiveGraph } from './graph.js';
 import { Meter, MeterError } from './meter.js';
+import { initSettings } from './settings-ui.js';
 import { WebSerialTransport } from './transport.js';
 
 const $ = (id) => document.getElementById(id);
@@ -43,9 +44,17 @@ function setConnected(connected) {
   $('choose').disabled = connected || !WebSerialTransport.supported;
   $('disconnect').disabled = !connected;
   $('record').disabled = !connected;
+  $('settingsCard').hidden = !connected;
   document.querySelectorAll('.needs-meter').forEach((el) => (el.disabled = !connected));
   $('readout').classList.toggle('stale', !connected);
 }
+
+const settings = initSettings({
+  basic: $('settingsBasic'),
+  advanced: $('settingsAdvanced'),
+  message: $('settingsMsg'),
+  getMeter: () => meter,
+});
 
 let connecting = false;
 
@@ -63,6 +72,7 @@ async function connect({ choose = false } = {}) {
       setStatus(`${id.model} · ${id.firmware} · S/N ${id.serial}`, 'ok');
       setConnected(true);
       poll();
+      settings.load();
     } catch (e) {
       await candidate.close();
       throw e;
@@ -87,6 +97,7 @@ async function disconnect(message = 'Not connected', kind = '') {
   await m?.close();
   setConnected(false);
   $('battery').hidden = true;
+  settings.reset();
   setStatus(message, kind);
 }
 
@@ -94,17 +105,38 @@ const BATTERY_EVERY_MS = 30_000;
 let batteryChecked = 0;
 let batterySupported = true;
 
-// The meter words the level itself (FULL, PARTLY_EMPTY_2, EMPTY…); we show that text and only warn on EMPTY.
+const SVG = 'http://www.w3.org/2000/svg';
+
+// Draws the meter's own symbol: outline with the terminal on the left and four bars, `filled` of them lit.
+function batteryIcon(filled) {
+  const svg = document.createElementNS(SVG, 'svg');
+  svg.setAttribute('viewBox', '0 0 34 16');
+  svg.setAttribute('aria-hidden', 'true');
+  const rect = (x, y, w, h, attrs) => {
+    const r = document.createElementNS(SVG, 'rect');
+    Object.entries({ x, y, width: w, height: h, ...attrs }).forEach(([k, v]) => r.setAttribute(k, v));
+    svg.append(r);
+  };
+  rect(0, 5, 3, 6, { rx: 1, fill: 'currentColor' }); // terminal
+  rect(4.75, 0.75, 28.5, 14.5, { rx: 2.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 });
+  for (let i = 0; i < BATTERY_BLOCKS; i++) {
+    rect(8 + i * 6, 4, 4, 8, { rx: 0.8, fill: 'currentColor', opacity: i < filled ? 1 : 0.15 });
+  }
+  return svg;
+}
+
+// The meter words the level itself (FULL, PARTLY_EMPTY_2, EMPTY…). Known wording becomes bars; anything else shows as text.
 async function updateBattery() {
   batteryChecked = Date.now();
   try {
     const code = await meter.queryBattery();
+    const bars = batteryBlocks(code);
     const el = $('battery');
-    const low = /^EMPTY/.test(code);
     el.hidden = false;
-    el.classList.toggle('low', low);
-    el.innerHTML = `<svg viewBox="0 0 26 13" aria-hidden="true"><rect x="0.75" y="0.75" width="21" height="11.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="23" y="4" width="2.5" height="5" rx="1" fill="currentColor"/></svg>`;
-    el.append(`Battery: ${formatBattery(code)}`);
+    el.classList.toggle('low', bars === 0);
+    el.title = `Battery: ${formatBattery(code)}${bars === null ? '' : ` (${bars} of ${BATTERY_BLOCKS} bars)`}`;
+    el.setAttribute('aria-label', el.title);
+    el.replaceChildren(bars === null ? `Battery: ${formatBattery(code)}` : batteryIcon(bars));
   } catch (e) {
     if (e instanceof MeterError) batterySupported = false; // older firmware without QBL: stop asking
   }
@@ -306,3 +338,5 @@ $('copyGraph').onclick = async () => {
     graphMessage(`Could not copy: ${e.message}`);
   }
 };
+
+$('settingsReload').onclick = () => settings.load();

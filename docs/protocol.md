@@ -72,6 +72,21 @@ recording threshold, save-slot names.
 
 `QMAP primfunction` returned a syntax error on our meter, so the map name or form is different.
 
+### Setting values (verified on our meter)
+
+Writes were verified by writing each setting back to its current value (ACK `0`, value unchanged).
+
+| Command | Effect |
+|---|---|
+| `MP <name>,<value>` | Sets a meter property, bare value as read back by `QMP`: `MP beeper,ON`, `MP ablto,900` |
+| `MPQ <field>,'<text>'` | Sets an owner field, text in single quotes |
+| `SAVNAME <n>,"<name>"` | Sets a save-slot name, name in double quotes |
+| `MP clock,<seconds>` | Sets the clock (not written during verification) |
+
+The meter keeps local wall-clock time encoded as if it were UTC: at 15:40 in CEST, `QMP clock` returned the value for
+15:40 UTC. Send `epoch - getTimezoneOffset() * 60` from a browser. `lang` cannot be set (error 2), and the list of
+accepted values for the other choices (`MM_DD`, `12`, `COMMA`, `OFF`…) is inferred, not confirmed.
+
 ### Reported by the open-source tools, not yet verified on our meter
 
 | Command | Reported meaning |
@@ -82,9 +97,6 @@ recording threshold, save-slot names.
 | `QPSI <n>` | Peak session n |
 | `QSMR <n>` | Saved measurement n |
 | `QMAP <name>` | Value map (count and key/value pairs) |
-| `MP <name>,<value>` | **Sets** a meter property (e.g. `MP CLOCK,<unix seconds>`) |
-| `MPQ <name>,'<value>'` | **Sets** an owner field |
-| `SAVNAME <n>,'<name>'` | **Sets** a save-slot name |
 | memory clear | Erases a memory section. Destructive: never send without an explicit user action |
 
 Binary replies start with the ACK then `#0` and a little-endian structure: 30 bytes per reading (id, 8-byte double

@@ -107,7 +107,7 @@
   #func,#modes,#graphTitle{text-transform:none;letter-spacing:.04em;font-size:13px;}
   #func{color:var(--teal);}
   .battery{text-transform:none;letter-spacing:.04em;font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:8px;}
-  .battery svg{width:26px;height:13px;}
+  .battery svg{width:34px;height:16px;display:block;}
   .battery.low{color:var(--red);}
   .readout{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:14px 0 4px;}
   #value{
@@ -142,6 +142,22 @@
   }
   .ygroup input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 2px rgba(63,209,199,.18);}
   .btn[aria-pressed="true"]{border-color:var(--teal);color:var(--teal);}
+  .settings{margin-top:20px;}
+  .set-grid{margin-top:8px;}
+  .set-row{display:grid;grid-template-columns:minmax(150px,220px) minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--border);}
+  .set-row label{color:var(--text);font-size:14px;display:flex;flex-direction:column;}
+  .set-row label small{font-size:11px;color:var(--muted2);font-family:var(--mono);letter-spacing:.06em;}
+  .set-row input,.set-row select{width:100%;max-width:340px;}
+  .set-row input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px;}
+  .set-row input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 2px rgba(63,209,199,.18);}
+  .set-row input:disabled{opacity:.5;}
+  .set-value,.set-clock{font-family:var(--mono);font-size:13px;color:var(--muted);}
+  details.more{margin-top:16px;border-top:1px solid var(--border);padding-top:14px;}
+  details.more > summary{cursor:pointer;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);}
+  details.more[open] > summary{color:var(--teal);margin-bottom:10px;}
+  #settingsMsg{font-family:var(--mono);font-size:12px;color:var(--muted);min-height:1.4em;margin-top:12px;}
+  #settingsMsg.bad{color:var(--red);}
+  @media (max-width:640px){.set-row{grid-template-columns:1fr auto;}.set-row label{grid-column:1/-1;}}
   details.advanced{margin-top:20px;}
   details.advanced > summary{cursor:pointer;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);}
   details.advanced[open] > summary{color:var(--teal);margin-bottom:16px;}
@@ -248,6 +264,18 @@
           <span class="hint">Drag the graph up or down to pan. Limits accept SI suffixes: 5m, 1.5k.</span>
         </div>
       </div>
+      <section class="card settings" id="settingsCard" hidden aria-label="Meter settings">
+        <div class="meta"><span style="text-transform:none;letter-spacing:.04em;font-size:13px;color:var(--teal)">Meter settings</span>
+          <button id="settingsReload" class="btn btn-ghost btn-sm">Read again</button></div>
+        <div id="settingsBasic" class="set-grid"></div>
+        <details class="more">
+          <summary>More settings</summary>
+          <p class="hint" style="margin:0 0 8px">Temperature offset, AutoHold threshold, owner fields and save-slot names.</p>
+          <div id="settingsAdvanced" class="set-grid"></div>
+        </details>
+        <div id="settingsMsg" role="status"></div>
+      </section>
+
       <details class="card advanced" id="advanced">
         <summary>Advanced</summary>
         <div class="adv-grid">

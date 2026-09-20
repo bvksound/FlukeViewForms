@@ -77,3 +77,15 @@ export function formatBattery(code) {
   const text = words.join(' ').toLowerCase();
   return text[0].toUpperCase() + text.slice(1) + (level ? ` (${level})` : '');
 }
+
+export const BATTERY_BLOCKS = 4; // the meter's battery symbol has four bars
+
+// FULL -> 4 bars, EMPTY -> 0, PARTLY_EMPTY_2 -> 2 (matches a 287 showing two bars when it reported PARTLY_EMPTY_2).
+// Returns null for wording we haven't seen, so the caller can fall back to the text.
+export function batteryBlocks(code) {
+  const c = code.trim();
+  if (c === 'FULL') return BATTERY_BLOCKS;
+  if (c === 'EMPTY') return 0;
+  const m = /^PARTLY_EMPTY_(\d)$/.exec(c);
+  return m ? Math.min(Number(m[1]), BATTERY_BLOCKS - 1) : null;
+}

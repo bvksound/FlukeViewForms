@@ -58,6 +58,35 @@ export class Meter {
     return (await this.command('QBL')).trim();
   }
 
+  // Meter properties (undocumented, see docs/protocol.md). Values are bare text: ON, 5, DD_MM, 900…
+  async getProperty(name) {
+    return (await this.command(`QMP ${name}`)).trim();
+  }
+
+  setProperty(name, value) {
+    return this.command(`MP ${name},${value}`, { data: false });
+  }
+
+  // Owner fields (company, site, operator, contact) travel in single quotes.
+  async getOwnerField(field) {
+    return (await this.command(`QMPQ ${field}`)).trim().replace(/^'(.*)'$/, '$1');
+  }
+
+  setOwnerField(field, text) {
+    if (/['\r\n]/.test(text)) return Promise.reject(new Error("Text can't contain quotes or line breaks"));
+    return this.command(`MPQ ${field},'${text}'`, { data: false });
+  }
+
+  // Names of the save slots (0-based), shown on the meter's Save softkey.
+  async getSaveName(index) {
+    return (await this.command(`QSAVNAME ${index}`)).trim();
+  }
+
+  setSaveName(index, name) {
+    if (/["\r\n]/.test(name)) return Promise.reject(new Error("Name can't contain quotes or line breaks"));
+    return this.command(`SAVNAME ${index},"${name}"`, { data: false });
+  }
+
   // Documented setup commands (see docs/protocol.md). None of them return data.
   defaultSetup() {
     return this.command('DS', { data: false });

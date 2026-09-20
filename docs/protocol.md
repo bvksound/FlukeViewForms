@@ -40,28 +40,68 @@ Timestamps are Unix seconds (float) from the meter's clock. `unitMultiplier` is 
 (-9 n, -6 µ, -3 m, 0, 3 k, 6 M). Reading IDs: LIVE, PRIMARY, SECONDARY, REL_LIVE, BARGRAPH, MINIMUM, MAXIMUM, AVERAGE,
 REL_REFERENCE, DB_REF, TEMP_OFFSET.
 
-## Found by scanning a real meter (unofficial)
+## Undocumented commands (unofficial)
 
-Observed on a Fluke 287, firmware V1.16, by sending `Q` + 1 to 3 letters and logging every reply that was not a
-syntax error (`1`). These are not in Fluke's spec; meanings are inferred from names and replies unless noted.
+Not in Fluke's spec. Two sources: an exhaustive scan of a real Fluke 287 (firmware V1.16) with every `Q` + 1 to 3 letter
+command (18,277 probes, only `Q` commands were sent), and the open-source projects credited at the bottom.
+"Verified" means it answered on our meter. Meanings are inferred from names and replies unless a source says otherwise.
+
+### Verified on our meter (read-only queries)
 
 | Command | Reply seen | Meaning |
 |---|---|---|
-| `QBL` | `PARTLY_EMPTY_2` | Battery level, in the meter's own words (used by the page). Other values not yet seen. |
+| `QBL` | `PARTLY_EMPTY_2` | Battery level in the meter's own words (used by the page). Other values not yet seen |
 | `QMF` | `MV_AC,NONE` | Current primary and secondary function |
 | `QMR` | `50,-3` | Current range number and unit multiplier |
 | `QMM` | `0` | Active modes (none) |
 | `QSN` | `14560135` | Serial number |
 | `QCVN` | `V0.14` | A version string, not the `ID` firmware version. Purpose unknown |
 | `QCCV` | `4` | Unknown, possibly a version or revision |
-| `QDDB` | binary | Binary form of `QDDA` (display data) |
+| `QDDB` | binary | Binary form of `QDDA` |
+| `QSLS` | `0,0,0,0` | Storage summary: number of recordings, min/max, peak and saved measurements (all empty here) |
+| `QSUS` | `DISABLED` | Unknown |
+| `QMP <name>` | see below | Read a meter property |
+| `QMPQ <name>` | `'text'` | Read an owner field: `company`, `site`, `operator`, `contact` (value in single quotes) |
+| `QSAVNAME <n>` | `Save` | Name of save slot n (0-based) |
 
-The scan covered only `Q???` and shorter, so longer names and non-`Q` commands (set commands, memory, recording)
-are still unknown. Commands that change the meter were deliberately never sent.
+`QMP` properties and the values seen: `clock` (Unix seconds, `1789918816`), `lang` (`ENGLISH`), `dateFmt` (`DD_MM`),
+`timeFmt` (`24`), `digits` (`5`), `beeper` (`ON`), `tempOS` (`0`, temperature offset), `numFmt` (`POINT`),
+`ablto` (`900`, auto backlight timeout, seconds), `apoffto` (`2100`, auto power-off timeout, seconds),
+`aheventTh` (`4`, AutoHold event threshold). Other names seen in the projects below: smoothing, DBM reference,
+recording threshold, save-slot names.
 
-## Not documented (needs capture from the official FlukeView Forms)
+`QMAP primfunction` returned a syntax error on our meter, so the map name or form is different.
 
-Reading and writing meter settings, saved measurements, min/max/average recordings, logging sessions, and setting the
-meter clock. FlukeView Forms clearly supports these, so the commands exist. Plan: run the official software on Windows
-with a serial port monitor between it and the IR cable, record the traffic, and document each command here with captured
-samples before implementing it.
+### Reported by the open-source tools, not yet verified on our meter
+
+| Command | Reported meaning |
+|---|---|
+| `QRSI <n>` | Recording session n: binary header, readings, name |
+| `QSRR <reading>,<sample>` | One sample of a recording (146-byte binary record) |
+| `QMMSI <n>` | Min/max session n |
+| `QPSI <n>` | Peak session n |
+| `QSMR <n>` | Saved measurement n |
+| `QMAP <name>` | Value map (count and key/value pairs) |
+| `MP <name>,<value>` | **Sets** a meter property (e.g. `MP CLOCK,<unix seconds>`) |
+| `MPQ <name>,'<value>'` | **Sets** an owner field |
+| `SAVNAME <n>,'<name>'` | **Sets** a save-slot name |
+| memory clear | Erases a memory section. Destructive: never send without an explicit user action |
+
+Binary replies start with the ACK then `#0` and a little-endian structure: 30 bytes per reading (id, 8-byte double
+value, unit, multiplier, decimals, state, timestamp). Each of these commands needs an argument, which is why a
+no-argument scan cannot find them.
+
+The scan found no command that changes the meter's function, range or mode. One user of the interface reports
+that "a serial port cannot turn the knob" (btbm.ch); the properties above are the only settings the projects change.
+
+## Sources
+
+- N0ury/dmm_util (Python, MIT): https://github.com/N0ury/dmm_util
+- fvaleur/dmm_util (Ruby original): https://github.com/fvaleur/dmm_util
+- cytrinox/f289ctrl (Rust, MIT): https://github.com/cytrinox/f289ctrl
+- Fluke 289/287 Remote Interface Specification (2007), see top of this file
+
+## Still unknown
+
+Starting and stopping a recording session on the meter, and the exact binary layouts (checksums, block framing). Plan:
+verify the reported memory commands on a meter that has stored data, then decode the binary records against the tools above.

@@ -1,5 +1,5 @@
 // A fake 287 for developing and testing without hardware ("Demo meter" button).
-import { LineBuffer } from './transport.js';
+import { LineBuffer } from '../src/transport.js';
 
 export class MockTransport {
   #lines = new LineBuffer();

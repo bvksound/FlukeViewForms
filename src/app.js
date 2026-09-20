@@ -1,65 +1,92 @@
-import { formatReading, prettyFunction } from './format.js';
+import { formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
+import { LiveGraph } from './graph.js';
 import { Meter } from './meter.js';
-import { MockTransport } from './mock.js';
 import { WebSerialTransport } from './transport.js';
 
 const $ = (id) => document.getElementById(id);
-const TRACE_POINTS = 120;
 
 let meter = null;
 let polling = false;
 let failures = 0;
-const trace = [];
 let recording = false;
 let rows = [];
+
+const graph = new LiveGraph({
+  scroll: $('graphScroll'),
+  inner: $('graphInner'),
+  canvas: $('graph'),
+  onFollowChange: (following) => {
+    $('live').disabled = following;
+  },
+  onRangeChange: (min, max, auto) => {
+    $('yAuto').setAttribute('aria-pressed', String(auto));
+    // Don't overwrite a limit while the user is typing it.
+    if (document.activeElement !== $('yMin')) $('yMin').value = formatEng(min);
+    if (document.activeElement !== $('yMax')) $('yMax').value = formatEng(max);
+  },
+});
 
 if (!WebSerialTransport.supported) {
   $('notice').style.display = 'block';
   $('connect').disabled = true;
+  $('choose').disabled = true;
 }
 
-function setStatus(text) {
-  $('status').textContent = text;
+function setStatus(text, kind = '') {
+  const el = $('status');
+  el.textContent = text;
+  el.className = `status ${kind}`.trim();
 }
 
 function setConnected(connected) {
   $('connect').disabled = connected || !WebSerialTransport.supported;
-  $('demo').disabled = connected;
+  $('choose').disabled = connected || !WebSerialTransport.supported;
   $('disconnect').disabled = !connected;
   $('record').disabled = !connected;
+  document.querySelectorAll('.needs-meter').forEach((el) => (el.disabled = !connected));
   $('readout').classList.toggle('stale', !connected);
 }
 
-async function connect(makeTransport) {
+let connecting = false;
+
+async function connect({ choose = false } = {}) {
+  if (connecting || meter) return;
+  connecting = true;
   try {
-    const transport = await makeTransport();
-    const candidate = new Meter(transport);
-    setStatus('Connecting…');
-    const id = await candidate.identify();
-    meter = candidate;
-    failures = 0;
-    setStatus(`${id.model} · ${id.firmware} · S/N ${id.serial}`);
-    setConnected(true);
-    poll();
+    const candidate = new Meter(await WebSerialTransport.request({ choose }));
+    setStatus('Connecting…', 'warn');
+    try {
+      const id = await candidate.identify();
+      meter = candidate;
+      failures = 0;
+      graph.clear();
+      setStatus(`${id.model} · ${id.firmware} · S/N ${id.serial}`, 'ok');
+      setConnected(true);
+      poll();
+    } catch (e) {
+      await candidate.close();
+      throw e;
+    }
   } catch (e) {
     console.error(e);
-    setStatus(
-      e.name === 'NotFoundError'
-        ? 'No serial port selected (picker dismissed, or no port available to this browser)'
-        : `Could not connect: ${e.name}: ${e.message}`,
-    );
-    meter?.close();
     meter = null;
+    if (e.name === 'NotFoundError') {
+      setStatus('No serial port selected');
+    } else {
+      setStatus(`Could not connect: ${e.message || e.name}`, 'bad');
+    }
+  } finally {
+    connecting = false;
   }
 }
 
-async function disconnect(message = 'Not connected') {
+async function disconnect(message = 'Not connected', kind = '') {
   polling = false;
   const m = meter;
   meter = null;
   await m?.close();
   setConnected(false);
-  setStatus(message);
+  setStatus(message, kind);
 }
 
 async function poll() {
@@ -72,8 +99,8 @@ async function poll() {
       failures = 0;
     } catch (e) {
       // A dropped reply is normal when the meter is off or the IR path is blocked; give up after a few.
-      if (++failures >= 4) return disconnect(`Lost meter: ${e.message}`);
-      setStatus(`No reply (${failures}/4)…`);
+      if (++failures >= 4) return disconnect(`Lost meter: ${e.message}`, 'bad');
+      setStatus(`No reply (${failures}/4)…`, 'warn');
     }
     const wait = Number($('interval').value) - (performance.now() - started);
     await new Promise((r) => setTimeout(r, Math.max(0, wait)));
@@ -91,12 +118,9 @@ function render(d) {
   $('modes').textContent = d.modes.map(prettyFunction).join(' · ');
 
   const sec = d.readings.SECONDARY;
-  if (sec) {
-    const s = formatReading(sec);
-    $('secondary').textContent = `${prettyFunction(d.secondaryFunction)} ${s.text} ${s.unit}`;
-  } else {
-    $('secondary').textContent = prettyFunction(d.secondaryFunction);
-  }
+  $('secondary').textContent = sec
+    ? `${prettyFunction(d.secondaryFunction)} ${formatReading(sec).text} ${formatReading(sec).unit}`
+    : prettyFunction(d.secondaryFunction);
 
   $('stats').replaceChildren(
     ...['MINIMUM', 'MAXIMUM', 'AVERAGE'].filter((k) => d.readings[k]).map((k) => {
@@ -109,15 +133,16 @@ function render(d) {
     }),
   );
 
-  if (main.state === 'NORMAL') {
-    trace.push(main.value / 10 ** main.unitMultiplier);
-    if (trace.length > TRACE_POINTS) trace.shift();
-    drawTrace();
-  }
+  // The graph plots base units (V, A, Ω…) so a range change doesn't jump the trace.
+  const now = Date.now();
+  graph.add(now, main.state === 'NORMAL' ? main.value : NaN, unitSymbol(main.baseUnit));
+  $('yUnit').textContent = unitSymbol(main.baseUnit);
+  $('graphTitle').textContent = `${prettyFunction(d.primaryFunction)} over time`;
+  $('graphCount').textContent = `${graph.length} samples`;
 
   if (recording) {
     rows.push([
-      new Date().toISOString(),
+      new Date(now).toISOString(),
       new Date(main.timestamp * 1000).toISOString(),
       d.primaryFunction,
       main.value,
@@ -127,28 +152,6 @@ function render(d) {
     $('count').textContent = `${rows.length} samples`;
     $('export').disabled = false;
   }
-}
-
-function drawTrace() {
-  const c = $('trace');
-  const dpr = window.devicePixelRatio || 1;
-  c.width = c.clientWidth * dpr;
-  c.height = c.clientHeight * dpr;
-  const g = c.getContext('2d');
-  g.scale(dpr, dpr);
-  const w = c.clientWidth, h = c.clientHeight;
-  const lo = Math.min(...trace), hi = Math.max(...trace);
-  const span = hi - lo || 1;
-  const style = getComputedStyle(document.documentElement);
-  g.strokeStyle = style.getPropertyValue('--trace');
-  g.lineWidth = 2;
-  g.beginPath();
-  trace.forEach((v, i) => {
-    const x = (i / (TRACE_POINTS - 1)) * w;
-    const y = h - 6 - ((v - lo) / span) * (h - 12);
-    i ? g.lineTo(x, y) : g.moveTo(x, y);
-  });
-  g.stroke();
 }
 
 function exportCsv() {
@@ -161,8 +164,8 @@ function exportCsv() {
   URL.revokeObjectURL(a.href);
 }
 
-$('connect').onclick = () => connect(() => WebSerialTransport.request());
-$('demo').onclick = () => connect(async () => new MockTransport());
+$('connect').onclick = () => connect();
+$('choose').onclick = () => connect({ choose: true });
 $('disconnect').onclick = () => disconnect();
 $('record').onclick = () => {
   recording = !recording;
@@ -172,3 +175,67 @@ $('record').onclick = () => {
   $('export').disabled = rows.length === 0;
 };
 $('export').onclick = exportCsv;
+$('zoom').onchange = (e) => graph.setScale(Number(e.target.value));
+$('live').onclick = () => graph.jumpToLive();
+$('clearGraph').onclick = () => {
+  graph.clear();
+  $('graphCount').textContent = '';
+};
+
+$('yAuto').onclick = () => graph.setYAuto();
+$('yIn').onclick = () => graph.zoomY(1 / 1.5);
+$('yOut').onclick = () => graph.zoomY(1.5);
+const applyYLimits = () => {
+  const min = parseEng($('yMin').value);
+  const max = parseEng($('yMax').value);
+  if (min < max) graph.setYRange(min, max);
+  else {
+    // Not a valid range: put the real one back.
+    const { min: a, max: b } = graph.yRange;
+    $('yMin').value = formatEng(a);
+    $('yMax').value = formatEng(b);
+  }
+};
+$('yMin').onchange = applyYLimits;
+$('yMax').onchange = applyYLimits;
+
+// Already-granted meter: connect without waiting for a click, and again whenever the cable is plugged in.
+if (WebSerialTransport.supported) {
+  WebSerialTransport.grantedPorts().then((ports) => ports.length && connect());
+  navigator.serial.addEventListener('connect', () => connect());
+}
+
+// Advanced: documented setup commands (confirm first) and a raw command box.
+async function runSetup(label, action, confirmText) {
+  if (!meter || (confirmText && !confirm(confirmText))) return;
+  const result = $('advResult');
+  try {
+    await action(meter);
+    result.textContent = `${label}: done`;
+  } catch (e) {
+    result.textContent = `${label}: ${e.message}`;
+  }
+}
+$('advDS').onclick = () => runSetup('Default setup', (m) => m.defaultSetup(), 'Reset the Hz trigger edge, pulse polarity and continuity beeper to defaults?');
+$('advRMP').onclick = () => runSetup('Reset meter properties', (m) => m.resetMeterProperties(), 'Reset the meter properties, like Reset Setup on the meter? Your current settings will be lost.');
+$('advRI').onclick = () => runSetup('Reset instrument', (m) => m.resetInstrument(), 'Restore ALL meter settings to factory defaults? Calibration is kept, other settings are lost.');
+
+$('rawForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const cmd = $('rawCmd').value.trim();
+  if (!cmd || !meter) return;
+  const log = $('rawLog');
+  log.hidden = false;
+  const append = (text) => {
+    log.textContent = `${log.textContent}${text}\n`.split('\n').slice(-200).join('\n');
+    log.scrollTop = log.scrollHeight;
+  };
+  append(`> ${cmd}`);
+  try {
+    const lines = await meter.raw(cmd);
+    lines.forEach((l) => append(`< ${l}`));
+  } catch (err) {
+    append(`! ${err.message}`);
+  }
+  $('rawCmd').select();
+};

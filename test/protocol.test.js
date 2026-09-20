@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatReading } from '../src/format.js';
+import { formatEng, formatReading, parseEng, prettyFunction } from '../src/format.js';
 import { Meter, MeterError } from '../src/meter.js';
-import { MockTransport } from '../src/mock.js';
+import { MockTransport } from './mock-meter.js';
 import { ProtocolError, parseAck, parseId, parseQdda, parseQm } from '../src/protocol.js';
 import { LineBuffer, TimeoutError } from '../src/transport.js';
 
@@ -72,6 +72,32 @@ test('formatReading scales by unit multiplier and handles overload', () => {
   assert.equal(formatReading(ol).text, 'OL');
 });
 
+test('prettyFunction writes units with the right case', () => {
+  assert.equal(prettyFunction('MV_DC'), 'mV DC');
+  assert.equal(prettyFunction('MV_AC_OVER_DC'), 'mV AC over DC');
+  assert.equal(prettyFunction('UA_DC'), 'µA DC');
+  assert.equal(prettyFunction('V_AC'), 'V AC');
+  assert.equal(prettyFunction('DIODE_TEST'), 'Diode test');
+  assert.equal(prettyFunction('MIN_MAX_AVG'), 'Min max avg');
+  assert.equal(prettyFunction('NONE'), '');
+});
+
+test('formatEng / parseEng round-trip axis limits', () => {
+  assert.equal(formatEng(0.00503), '5.03m');
+  assert.equal(formatEng(1500), '1.5k');
+  assert.equal(formatEng(-0.0002), '-200µ');
+  assert.equal(formatEng(0), '0');
+  assert.equal(parseEng('5m'), 0.005);
+  assert.equal(parseEng('1.5k'), 1500);
+  assert.equal(parseEng('-2'), -2);
+  assert.equal(parseEng('3u'), 3e-6);
+  assert.equal(parseEng('3µ'), 3e-6);
+  assert.equal(parseEng('2M'), 2e6);
+  assert.equal(parseEng('1e-3'), 0.001);
+  assert.ok(Number.isNaN(parseEng('abc')));
+  assert.ok(Number.isNaN(parseEng('')));
+});
+
 test('LineBuffer reassembles replies delivered in fragments', async () => {
   const buf = new LineBuffer();
   // Real serial ports deliver arbitrary chunks; a chunk may hold no complete line.
@@ -102,4 +128,10 @@ test('Meter talks to the mock meter', async () => {
   // Concurrent commands are serialized rather than interleaved.
   const [a, b] = await Promise.all([meter.queryDisplay(), meter.queryMeasurement()]);
   assert.ok(a.readings.PRIMARY && b.unit);
+});
+
+test('Meter.raw returns every reply line, and bad commands still answer', async () => {
+  const meter = new Meter(new MockTransport());
+  assert.deepEqual(await meter.raw('ID', { settleMs: 60 }), ['0', 'FLUKE 287,V1.00,00000000']);
+  assert.deepEqual(await meter.raw('NOPE', { settleMs: 60 }), ['1']);
 });

@@ -53,6 +53,36 @@ export class Meter {
     return parseQdda(await this.command('QDDA'));
   }
 
+  // Documented setup commands (see docs/protocol.md). None of them return data.
+  defaultSetup() {
+    return this.command('DS', { data: false });
+  }
+
+  resetInstrument() {
+    return this.command('RI', { data: false });
+  }
+
+  resetMeterProperties() {
+    return this.command('RMP', { data: false });
+  }
+
+  // Sends any command and returns every line the meter answers with, ACK included. For exploring
+  // undocumented commands; stops once the meter has been quiet for `settleMs`.
+  raw(command, { timeoutMs = this.#timeoutMs, settleMs = 300 } = {}) {
+    return this.#enqueue(async () => {
+      this.#transport.flush();
+      await this.#transport.write(`${command}\r`);
+      const lines = [];
+      try {
+        lines.push(await this.#transport.readLine(timeoutMs));
+        for (;;) lines.push(await this.#transport.readLine(settleMs));
+      } catch (e) {
+        if (!(e instanceof TimeoutError)) throw e;
+      }
+      return lines;
+    });
+  }
+
   close() {
     return this.#transport.close();
   }

@@ -3,80 +3,282 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FlukeView Forms Open — Fluke 287</title>
+<title>Fluke 287 Live Viewer — BVKsound</title>
+<meta name="description" content="Free browser-based live viewer and logger for the Fluke 287 multimeter over its IR port. Live readout, min/max/average, trend and CSV export. Runs entirely in your browser.">
 <style>
-  :root {
-    --bg: #f6f6f4; --panel: #fff; --text: #1c1c1a; --muted: #6b6b66; --line: #dcdcd6;
-    --accent: #f5b800; --accent-text: #1c1c1a; --danger: #c0392b; --trace: #1c6fd1;
+  /* Tokens and components follow the BVKsound site (see DecibelMeter/website). */
+  :root{
+    --bg:#0a0e12;
+    --panel:#0d1216;
+    --panel2:#10151a;
+    --border:#1c242c;
+    --text:#e8edf0;
+    --muted:#8a97a1;
+    --muted2:#5b6670;
+    --teal:#3fd1c7;
+    --green:#35d07f;
+    --amber:#f0b429;
+    --red:#ef5a6f;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --maxw: 1120px;
+    --trace: var(--teal);
+    color-scheme:dark;
   }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #161615; --panel: #212120; --text: #ecece8; --muted: #9a9a94; --line: #3a3a37; --trace: #5aa2ff; }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  [hidden]{display:none!important;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
-  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
-           padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  h1 { font-size: 16px; margin: 0; }
-  main { max-width: 860px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-  button, select { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line);
-                   background: var(--panel); color: var(--text); cursor: pointer; }
-  button.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
-  button:disabled { opacity: .45; cursor: default; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  #notice { display: none; color: var(--danger); }
-  #status { color: var(--muted); }
-  .readout { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  #value { font: 600 clamp(48px, 14vw, 96px)/1 ui-monospace, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
-  #unit { font-size: clamp(22px, 6vw, 40px); }
-  #coupling, #func, #secondary, #modes { color: var(--muted); }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 12px; }
-  .stats div { border-top: 1px solid var(--line); padding-top: 6px; }
-  .stats small { display: block; color: var(--muted); }
-  canvas { width: 100%; height: 140px; display: block; margin-top: 12px; }
-  .stale { opacity: .4; }
+  a{color:inherit;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+  section{padding:56px 0;}
+  h1,h2,h3{font-weight:700;letter-spacing:-0.01em;margin:0 0 16px;}
+  h1{font-size:clamp(28px,4vw,42px);}
+  p{color:var(--muted);margin:0 0 16px;}
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--teal);
+    margin:0 0 12px;
+  }
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:13px 24px;
+    border-radius:8px;
+    font-weight:600;
+    font-size:15px;
+    text-decoration:none;
+    border:1px solid transparent;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .btn-primary{background:var(--teal);color:#04211e;}
+  .btn-primary:hover:not(:disabled){background:#5fdcd3;}
+  .btn-ghost{background:transparent;color:var(--text);border-color:var(--border);}
+  .btn-ghost:hover:not(:disabled){border-color:var(--muted2);}
+  .btn-sm{padding:8px 14px;font-size:13px;}
+  .btn:disabled{opacity:.4;cursor:default;}
+  button:focus-visible,select:focus-visible{outline:none;border-color:var(--teal);box-shadow:0 0 0 2px rgba(63,209,199,.18);}
+  select{
+    background:var(--bg);border:1px solid var(--border);border-radius:8px;
+    padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:14px;
+  }
+
+  /* page head + connection bar */
+  .page-head{padding:72px 0 8px;text-align:center;}
+  .page-head p{max-width:60ch;margin-left:auto;margin-right:auto;}
+  .device-logo{display:block;height:29px;width:auto;margin:0 auto 22px;border-radius:4px;}
+  .tool-bar{
+    display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;
+    margin:28px auto 8px;padding:16px 22px;max-width:760px;
+    background:var(--panel2);border:1px solid var(--border);border-radius:12px;
+  }
+  .status{
+    font-family:var(--mono);font-size:12px;border-radius:8px;padding:8px 12px;border:1px solid var(--border);
+    color:var(--muted);
+  }
+  .status.ok{color:var(--green);border-color:rgba(53,208,127,.35);background:rgba(53,208,127,.07);}
+  .status.warn{color:var(--amber);border-color:rgba(240,180,41,.35);background:rgba(240,180,41,.07);}
+  .status.bad{color:var(--red);border-color:rgba(239,90,111,.35);background:rgba(239,90,111,.07);}
+  #notice{
+    display:none;max-width:760px;margin:24px auto 0;padding:14px 18px;text-align:left;font-size:14px;
+    color:var(--amber);border:1px solid rgba(240,180,41,.35);background:rgba(240,180,41,.07);border-radius:12px;
+  }
+
+  /* live view */
+  .live{padding:32px 0 64px;}
+  .card{
+    background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:22px;
+  }
+  .meta{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;
+        font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);}
+  /* Labels containing SI units (mV, µA, kΩ…) must keep their case; never text-transform them. */
+  #func,#modes,#graphTitle{text-transform:none;letter-spacing:.04em;font-size:13px;}
+  #func{color:var(--teal);}
+  .readout{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:14px 0 4px;}
+  #value{
+    font:700 clamp(52px,13vw,104px)/1 var(--mono);color:var(--teal);
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+  }
+  #unit{font-size:clamp(22px,5vw,38px);font-weight:600;}
+  #coupling{font-family:var(--mono);font-size:14px;color:var(--muted);}
+  #secondary{font-family:var(--mono);color:var(--muted);min-height:1.5em;}
+  .readout.stale #value{color:var(--muted2);}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px;}
+  .stats:empty{display:none;}
+  .stats div{border-top:1px solid var(--border);padding-top:9px;font-family:var(--mono);font-size:17px;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums;}
+  .stats small{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:400;color:var(--muted2);}
+  .graph-card{margin-top:20px;}
+  .graph-scroll{
+    margin-top:14px;overflow-x:auto;overflow-y:hidden;background:var(--bg);
+    border:1px solid var(--border);border-radius:8px;
+  }
+  .graph-scroll::-webkit-scrollbar{height:12px;}
+  .graph-scroll::-webkit-scrollbar-track{background:var(--panel);}
+  .graph-scroll::-webkit-scrollbar-thumb{background:#2a3641;border-radius:6px;border:2px solid var(--panel);}
+  .graph-scroll::-webkit-scrollbar-thumb:hover{background:var(--muted2);}
+  .graph-inner{position:relative;height:260px;}
+  .graph-inner canvas{position:sticky;left:0;display:block;}
+  .controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:18px;}
+  .controls label{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:14px;}
+  .ygroup{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--muted);font-size:14px;}
+  .ygroup input{
+    width:84px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;
+    color:var(--text);font-family:var(--mono);font-size:13px;
+  }
+  .ygroup input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 2px rgba(63,209,199,.18);}
+  .btn[aria-pressed="true"]{border-color:var(--teal);color:var(--teal);}
+  details.advanced{margin-top:20px;}
+  details.advanced > summary{cursor:pointer;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);}
+  details.advanced[open] > summary{color:var(--teal);margin-bottom:16px;}
+  .adv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;}
+  .adv-item{border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg);}
+  .adv-item strong{font-size:14px;}
+  .adv-item p{font-size:13px;margin:0;color:var(--muted);}
+  .adv-item .btn{align-self:flex-start;}
+  .adv-item.danger .btn{border-color:rgba(239,90,111,.5);color:var(--red);}
+  .raw{margin-top:20px;border-top:1px solid var(--border);padding-top:16px;}
+  .raw form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .raw input{flex:1;min-width:180px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;}
+  .raw input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 2px rgba(63,209,199,.18);}
+  #rawLog{margin:12px 0 0;max-height:220px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:12px/1.5 var(--mono);color:var(--muted);white-space:pre-wrap;word-break:break-all;}
+  #advResult{font-family:var(--mono);font-size:12px;color:var(--muted);min-height:1.4em;margin-top:12px;}
+  .hint{font-size:12px;color:var(--muted2);}
+  #count{font-family:var(--mono);font-size:12px;color:var(--muted2);}
+  .foot-note{max-width:760px;margin:20px auto 0;font-size:13px;color:var(--muted2);text-align:center;}
+
+  @media (max-width:880px){.page-head{padding:52px 0 4px;}}
+  @media (max-width:480px){.wrap{padding:0 16px;}.card{padding:16px;}.tool-bar{padding:14px;}}
 </style>
 </head>
 <body>
-<header>
-  <h1>FlukeView Forms Open <span style="color:var(--muted)">· Fluke 287</span></h1>
-  <div class="row">
-    <span id="status">Not connected</span>
-    <button id="connect" class="primary">Connect meter</button>
-    <button id="demo">Demo meter</button>
-    <button id="disconnect" disabled>Disconnect</button>
-  </div>
-</header>
-<main>
-  <p id="notice" class="panel">
-    This browser has no Web Serial support. Use Chrome, Edge or Opera on macOS, Windows or Linux
-    (Firefox and Safari can't talk to serial ports). The page must be served from https:// or http://localhost.
-  </p>
 
-  <section class="panel" aria-label="Live view">
-    <div class="row" style="justify-content: space-between">
-      <span id="func"></span>
-      <span id="modes"></span>
-    </div>
-    <div class="readout" id="readout" aria-live="off">
-      <span id="value">----</span><span id="unit"></span><span id="coupling"></span>
-    </div>
-    <div id="secondary"></div>
-    <div class="stats" id="stats"></div>
-    <canvas id="trace" aria-label="Recent readings"></canvas>
-    <div class="row" style="margin-top: 12px">
-      <label>Poll every
-        <select id="interval">
-          <option value="250">0.25 s</option><option value="500" selected>0.5 s</option>
-          <option value="1000">1 s</option><option value="5000">5 s</option>
-        </select>
-      </label>
-      <button id="record" disabled>Record</button>
-      <button id="export" disabled>Export CSV</button>
-      <span id="count" style="color: var(--muted)"></span>
+<header id="siteHeader"><nav style="padding:16px 24px;text-align:center;border-bottom:1px solid #1c242c"><a href="index.html">Home</a> · <a href="decibel-meter.html">DecibelMeter</a> · <a href="contact.html">Contact</a></nav></header>
+<script src="site-nav.js"></script>
+
+<main>
+
+  <section class="page-head">
+    <div class="wrap">
+      <img class="device-logo" src="images/fluke-seeklogo.svg" alt="Fluke" width="143" height="29">
+      <p class="eyebrow">Tools</p>
+      <h1>Fluke 287 Live Viewer</h1>
+      <p>Read a Fluke 287 through its IR cable, watch the display live, and record readings to CSV.
+        Everything runs in your browser — nothing is uploaded.</p>
+
+      <div class="tool-bar">
+        <button id="connect" class="btn btn-primary">Connect meter</button>
+        <button id="choose" class="btn btn-ghost" title="Pick a different serial port">Choose port…</button>
+        <button id="disconnect" class="btn btn-ghost" disabled>Disconnect</button>
+        <span id="status" class="status" role="status">Not connected</span>
+      </div>
+      <p id="notice">
+        This browser has no Web Serial support. Use Chrome, Edge or Opera on macOS, Windows or Linux
+        (Firefox and Safari can't talk to serial ports). The page must be served over https://.
+      </p>
     </div>
   </section>
+
+  <section class="live" aria-label="Live view">
+    <div class="wrap">
+      <div class="card">
+        <div class="meta"><span id="func"></span><span id="modes"></span></div>
+        <div class="readout stale" id="readout" aria-live="off">
+          <span id="value">----</span><span id="unit"></span><span id="coupling"></span>
+        </div>
+        <div id="secondary"></div>
+        <div class="stats" id="stats"></div>
+        <div class="controls">
+          <label>Poll every
+            <select id="interval">
+              <option value="250">0.25 s</option><option value="500" selected>0.5 s</option>
+              <option value="1000">1 s</option><option value="5000">5 s</option>
+            </select>
+          </label>
+          <button id="record" class="btn btn-ghost btn-sm" disabled>Record</button>
+          <button id="export" class="btn btn-ghost btn-sm" disabled>Export CSV</button>
+          <span id="count"></span>
+        </div>
+      </div>
+      <div class="card graph-card">
+        <div class="meta"><span id="graphTitle">Reading over time</span><span id="graphCount"></span></div>
+        <div class="graph-scroll" id="graphScroll" tabindex="0" aria-label="Live graph, scrolls horizontally">
+          <div class="graph-inner" id="graphInner"><canvas id="graph"></canvas></div>
+        </div>
+        <div class="controls">
+          <label>Zoom
+            <select id="zoom">
+              <option value="10">10 px/s</option><option value="20">20 px/s</option>
+              <option value="40" selected>40 px/s</option><option value="80">80 px/s</option>
+              <option value="160">160 px/s</option>
+            </select>
+          </label>
+          <button id="live" class="btn btn-ghost btn-sm" disabled>Jump to live</button>
+          <button id="clearGraph" class="btn btn-ghost btn-sm">Clear graph</button>
+        </div>
+        <div class="controls">
+          <span class="ygroup">Y axis
+            <button id="yAuto" class="btn btn-ghost btn-sm" aria-pressed="true" title="Fit the visible data">Auto</button>
+            <input id="yMin" aria-label="Y minimum" inputmode="text" spellcheck="false" title="Minimum, e.g. -2, 5m, 1.5k">
+            to
+            <input id="yMax" aria-label="Y maximum" inputmode="text" spellcheck="false" title="Maximum, e.g. 10, 5m, 1.5k">
+            <span id="yUnit"></span>
+            <button id="yIn" class="btn btn-ghost btn-sm" title="Zoom in">Zoom +</button>
+            <button id="yOut" class="btn btn-ghost btn-sm" title="Zoom out">Zoom −</button>
+          </span>
+          <span class="hint">Drag the graph up or down to pan. Limits accept SI suffixes: 5m, 1.5k.</span>
+        </div>
+      </div>
+      <details class="card advanced" id="advanced">
+        <summary>Advanced</summary>
+        <div class="adv-grid">
+          <div class="adv-item">
+            <strong>Default setup</strong>
+            <p>Resets the Hz trigger edge, pulse width and duty cycle polarity, and the continuity beeper. Does not touch other settings.</p>
+            <button id="advDS" class="btn btn-ghost btn-sm needs-meter" disabled>Default setup</button>
+          </div>
+          <div class="adv-item danger">
+            <strong>Reset meter properties</strong>
+            <p>Same as <em>Reset Setup</em> on the meter's front-panel Setup menu.</p>
+            <button id="advRMP" class="btn btn-ghost btn-sm needs-meter" disabled>Reset properties…</button>
+          </div>
+          <div class="adv-item danger">
+            <strong>Reset instrument</strong>
+            <p>Restores all meter settings to factory defaults (calibration is kept). Same as <em>Reset Meter</em> in Setup.</p>
+            <button id="advRI" class="btn btn-ghost btn-sm needs-meter" disabled>Reset instrument…</button>
+          </div>
+        </div>
+        <div id="advResult" role="status"></div>
+        <div class="raw">
+          <strong style="font-size:14px">Raw command</strong>
+          <p class="hint" style="margin:4px 0 12px">Send any command to the meter and see every reply line. Commands end with a carriage return automatically.
+            Commands the public Fluke spec doesn't document may change meter settings, so use with care.</p>
+          <form id="rawForm">
+            <input id="rawCmd" autocomplete="off" spellcheck="false" placeholder="e.g. ID or QM" aria-label="Raw command">
+            <button id="rawSend" class="btn btn-ghost btn-sm needs-meter" disabled>Send</button>
+          </form>
+          <pre id="rawLog" aria-live="polite" hidden></pre>
+        </div>
+      </details>
+      <p class="foot-note">Needs the Fluke IR-to-USB cable (IR189USB or compatible) and Chrome, Edge or Opera.
+        Open source under the MIT license. Not affiliated with Fluke Corporation.</p>
+    </div>
+  </section>
+
 </main>
+
+<footer id="siteFooter"></footer>
 <script type="module" src="src/app.js"></script>
 </body>
 </html>

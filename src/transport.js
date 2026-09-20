@@ -55,12 +55,39 @@ export class WebSerialTransport {
     return typeof navigator !== 'undefined' && 'serial' in navigator;
   }
 
-  // Must be called from a user gesture (click).
-  static async request() {
-    const port = await navigator.serial.requestPort();
+  // Ports this site was already granted (no popup needed). The last-used device comes first.
+  static async grantedPorts() {
+    const ports = await navigator.serial.getPorts();
+    const last = WebSerialTransport.#lastUsed();
+    const key = (p) => `${p.getInfo().usbVendorId}:${p.getInfo().usbProductId}`;
+    return ports.sort((a, b) => (key(b) === last) - (key(a) === last));
+  }
+
+  // Reuses the remembered port when there is one; otherwise shows the browser's picker, which needs a click.
+  // `choose: true` always shows the picker.
+  static async request({ choose = false } = {}) {
+    const port = (!choose && (await WebSerialTransport.grantedPorts())[0]) || (await navigator.serial.requestPort());
     const transport = new WebSerialTransport(port);
     await transport.open();
+    WebSerialTransport.#remember(port);
     return transport;
+  }
+
+  static #lastUsed() {
+    try {
+      return localStorage.getItem('fluke287.lastPort');
+    } catch {
+      return null;
+    }
+  }
+
+  static #remember(port) {
+    const { usbVendorId, usbProductId } = port.getInfo();
+    try {
+      localStorage.setItem('fluke287.lastPort', `${usbVendorId}:${usbProductId}`);
+    } catch {
+      /* storage blocked: we just lose the preference */
+    }
   }
 
   #port;

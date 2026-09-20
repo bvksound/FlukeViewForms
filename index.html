@@ -139,6 +139,7 @@
   .memory .bad,#memoryMsg.bad{color:var(--red);}
   #memoryBody{margin-top:8px;}
   .mem-block{margin-top:18px;padding:0;}
+  .row-actions{display:flex;flex-wrap:wrap;gap:6px;}
   .mem-block h4{margin:0 0 8px;font-size:13px;font-family:var(--mono);letter-spacing:.06em;color:var(--muted);font-weight:600;}
   .mem-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);}
   .mem-scroll table{border-collapse:collapse;width:100%;font-size:13px;}
@@ -195,6 +196,7 @@
   body.connected .meter-only{display:block;}
   .ctx{position:fixed;z-index:100;min-width:230px;background:#121a21;border:1px solid #2a3641;border-radius:10px;padding:6px;box-shadow:0 18px 44px -12px rgba(0,0,0,.75);}
   .ctx button{display:block;width:100%;text-align:left;background:none;border:none;border-radius:6px;padding:9px 12px;font:inherit;font-size:14px;color:var(--text);cursor:pointer;}
+  .ctx hr{border:none;border-top:1px solid #26313b;margin:6px 0;}
   .ctx button:hover,.ctx button:focus-visible{background:rgba(63,209,199,.14);outline:none;}
   .seg{display:inline-flex;}
   .seg .btn{border-radius:0;}
@@ -262,11 +264,7 @@
         </div>
         <div id="secondary"></div>
         <div class="stats" id="stats"></div>
-        <div class="controls">
-          <button id="record" class="btn btn-ghost btn-sm" disabled>Record</button>
-          <button id="export" class="btn btn-ghost btn-sm" disabled>Export CSV</button>
-          <span id="count"></span>
-        </div>
+        <p class="hint" style="margin:14px 0 0">Everything is shown in the graph below first, live or from the meter's memory. Export it from there.</p>
       </details>
 
       <details class="card collapsible graph-card" id="graphCard" open>
@@ -294,7 +292,9 @@
           <button id="live" class="btn btn-ghost btn-sm" disabled>Jump to live</button>
           <button id="clearGraph" class="btn btn-ghost btn-sm">Clear graph</button>
           <span class="spacer"></span>
+          <button id="exportCsv" class="btn btn-ghost btn-sm" title="Save every point of what the graph shows as a CSV file">Export CSV</button>
           <button id="exportJpg" class="btn btn-ghost btn-sm" title="Save the visible part of the graph as a JPG image">Export JPG</button>
+          <button id="copyValues" class="btn btn-ghost btn-sm" title="Copy the visible x,y values as text">Copy values</button>
           <button id="copyGraph" class="btn btn-ghost btn-sm" title="Copy the visible part of the graph to the clipboard as an image">Copy image</button>
           <span id="graphMsg" class="hint" role="status"></span>
         </div>
@@ -313,6 +313,9 @@
       </details>
 
       <div id="graphMenu" class="ctx" role="menu" aria-label="Graph" hidden>
+        <button role="menuitem" id="ctxCsv">Export CSV</button>
+        <button role="menuitem" id="ctxJpg">Export JPG</button>
+        <hr>
         <button role="menuitem" id="ctxVisible">Copy visible x,y values</button>
         <button role="menuitem" id="ctxAll">Copy all x,y values</button>
         <button role="menuitem" id="ctxImage">Copy image</button>
@@ -321,10 +324,10 @@
       <details class="card collapsible memory" id="memoryCard" open hidden>
         <summary class="meta"><span class="title">Meter memory</span><span class="grow"></span><span id="memoryCounts"></span></summary>
         <p class="hint" style="margin:14px 0 12px">Reads what is stored on the meter: saved measurements, min/max and peak sessions, and recordings.
-          Saved measurements and downloaded recordings are plotted in the graph above. Read-only: nothing on the meter is changed or erased.</p>
+          Use View in graph to plot saved measurements, a recording or a min/max or peak session in the graph above, where it can be exported. Read-only: nothing on the meter is changed or erased.</p>
         <div class="controls" style="margin-top:0">
           <button id="memoryRead" class="btn btn-primary btn-sm">Read memory</button>
-          <button id="memoryCsv" class="btn btn-ghost btn-sm" disabled>Download CSV</button>
+          <button id="memoryView" class="btn btn-ghost btn-sm" disabled title="Plot the saved measurements in the graph above (replaces what the graph shows now)">View saved measurements in graph</button>
           <span id="memoryMsg" class="hint" role="status"></span>
         </div>
         <div id="memoryBody"></div>

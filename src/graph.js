@@ -189,12 +189,12 @@ export class LiveGraph {
   }
 
   // `unit` is the base unit's symbol; a different unit than before starts a fresh trace.
-  add(t, value, unit) {
+  add(t, value, unit, state) {
     if (unit !== this.#liveUnit) {
       this.#live = [];
       this.#liveUnit = unit;
     }
-    this.#live.push({ t, v: value });
+    this.#live.push({ t, v: value, state });
     if (this.#live.length > MAX_POINTS) this.#trim(MAX_POINTS / 10);
     if (this.#view === 'live') this.#layout();
   }

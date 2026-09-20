@@ -32,9 +32,8 @@ scripts/sync-website.sh /path/to/website   # optional: builds and copies it into
 | Battery level (four-bar icon) | Working |
 | Settings page with tabs (Meter, Owner & save slots, Reset & tools, Viewer) | Working; write syntax verified on a real 287 |
 | Advanced: default setup, resets, raw command box | Working; resets not yet run on a real meter |
-| Record + CSV export | Working |
 | Meter memory readout (saved measurements, min/max, peak, recordings, CSV) | Recordings verified on a real 287; saved measurements, min/max and peak decoders still untested on real data |
-| Downloaded data in the trend graph (dots for saved measurements, line + min/max band for recordings) | Working in the browser with a simulated meter |
+| Graph as the single place to view and export: live trace or memory data (saved measurements, min/max and peak sessions as dots, recordings as a line with a min/max band); Export CSV, Export JPG, copy x,y values, copy image, right-click menu | Working in the browser with a simulated meter |
 | Collapsible sections | Working, remembered between visits |
 | Form templates (logo, title, fields) | Planned: JSON templates in IndexedDB |
 | PDF export | Planned: client-side (pdf-lib or jsPDF) |

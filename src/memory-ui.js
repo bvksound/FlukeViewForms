@@ -1,5 +1,4 @@
 // The "Meter memory" panel: reads stored measurements, min/max and peak sessions and recordings from the meter.
-import { toCsv } from './csv.js';
 import { formatReading, prettyFunction, unitSymbol } from './format.js';
 import { MemoryReader } from './memory.js';
 import { meterClockToText, meterSecondsToLocalMs } from './settings.js';
@@ -11,8 +10,6 @@ function el(tag, props = {}, ...children) {
 }
 
 const when = (seconds) => meterClockToText(seconds);
-const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
-const safe = (name) => name.replace(/[^\w.-]+/g, '_').slice(0, 40) || 'recording';
 
 // A stored reading as the meter would have displayed it.
 function show(r) {
@@ -21,25 +18,19 @@ function show(r) {
   return `${f.text} ${f.unit}${f.coupling ? ` ${f.coupling}` : ''}`.trim();
 }
 
-function download(filename, text) {
-  const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/csv' })), download: filename });
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
 const usable = (r) => (r.state === 'NORMAL' ? r.value : NaN);
 
 // Saved measurements as dots over time (all in the unit most of them share).
 export function measurementsTrend(entries) {
   const items = entries.filter((e) => e.item).map((e) => {
     const r = e.item.readings.PRIMARY ?? Object.values(e.item.readings)[0];
-    return r && { t: meterSecondsToLocalMs(r.time), v: usable(r), unit: r.unit };
+    return r && { t: meterSecondsToLocalMs(r.time), v: usable(r), unit: r.unit, state: r.state };
   }).filter(Boolean);
   if (!items.length) return null;
   const counts = new Map();
   items.forEach((i) => counts.set(i.unit, (counts.get(i.unit) ?? 0) + 1));
   const [unit] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
-  const points = items.filter((i) => i.unit === unit).map(({ t, v }) => ({ t, v }));
+  const points = items.filter((i) => i.unit === unit).map(({ t, v, state }) => ({ t, v, state }));
   const skipped = items.length - points.length;
   return {
     title: `Saved measurements: ${points.length}${skipped ? ` (${skipped} in other units not shown)` : ''}`,
@@ -57,6 +48,7 @@ export function recordingTrend(info, samples) {
     return {
       t: meterSecondsToLocalMs(s.start),
       v: ok ? s.average : NaN,
+      state: s.stats.AVERAGE?.state,
       lo: s.stats.MINIMUM ? usable(s.stats.MINIMUM) : NaN,
       hi: s.stats.MAXIMUM ? usable(s.stats.MAXIMUM) : NaN,
     };
@@ -64,11 +56,24 @@ export function recordingTrend(info, samples) {
   return { title: `Recording "${info.name}": ${samples.length} samples`, unit: unitSymbol(unit), style: 'line', points };
 }
 
-export function initMemory({ counts, message, body, readButton, csvButton, getMeter, setBusy, showTrend = () => {} }) {
+// A min/max or peak session as dots: one per stored reading (minimum, maximum, average…), at its own time.
+export function sessionTrend(item, label) {
+  const readings = Object.values(item.readings);
+  if (!readings.length) return null;
+  const unit = readings[0].unit;
+  const points = readings.filter((r) => r.unit === unit).map((r) => ({ t: meterSecondsToLocalMs(r.time), v: usable(r), state: r.state }));
+  return { title: `${label} "${item.name}": ${points.length} readings`, unit: unitSymbol(unit), style: 'points', points };
+}
+
+export function initMemory({
+  counts, message, body, readButton, viewButton, getMeter, setBusy,
+  showTrend = () => {}, graphInfo = () => ({ hasData: false, view: 'live' }),
+}) {
   let reader = null;
   let readerMeter = null;
   let data = null;
   let abort = null;
+  const sampleCache = new Map(); // downloaded recording samples, so viewing after downloading (or twice) is instant
 
   const say = (text, bad = false) => {
     message.textContent = text;
@@ -111,31 +116,47 @@ export function initMemory({ counts, message, body, readButton, csvButton, getMe
     }
     for (const [title, list] of [['Min / max sessions', minMax], ['Peak sessions', peak]]) {
       if (!list.length) continue;
-      body.append(table(title, ['#', 'Name', 'Start', 'End', 'Function', 'Readings'],
-        list.map(({ index, item, error }) => (error ? [`${index + 1}`, ...failed(error)]
-          : [`${index + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction),
-            Object.values(item.readings).map((r) => `${r.id.toLowerCase()} ${show(r)}`).join(' · ')]))));
+      const label = title.startsWith('Peak') ? 'Peak session' : 'Min/max session';
+      body.append(table(title, ['#', 'Name', 'Start', 'End', 'Function', 'Readings', ''],
+        list.map(({ index, item, error }) => {
+          if (error) return [`${index + 1}`, ...failed(error)];
+          const view = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'View in graph' });
+          view.onclick = () => viewSession(item, label);
+          return [`${index + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction),
+            Object.values(item.readings).map((r) => `${r.id.toLowerCase()} ${show(r)}`).join(' · '), view];
+        })));
     }
     if (recordings.length) {
       body.append(table('Recordings', ['#', 'Name', 'Start', 'End', 'Interval', 'Samples', ''],
         recordings.map(({ index, item, error }) => {
           if (error) return [`${index + 1}`, ...failed(error)];
-          const button = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'Download samples' });
-          button.onclick = () => downloadRecording(item, button);
-          return [`${index + 1}`, item.name, when(item.start), when(item.end), `${item.sampleInterval} s`, `${item.sampleCount}`, button];
+          const view = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'View in graph' });
+          view.onclick = () => viewRecording(item, view);
+          return [`${index + 1}`, item.name, when(item.start), when(item.end), `${item.sampleInterval} s`, `${item.sampleCount}`, view];
         })));
     }
   }
 
-  async function downloadRecording(info, button) {
-    const meter = getMeter();
-    if (!meter) return;
-    if (abort) {
-      abort.abort();
-      return;
+  // What the graph is showing now, and what replacing it would discard, spelled out before anything is replaced.
+  function confirmReplace(what) {
+    const info = graphInfo();
+    const lines = [`Show ${what} in the graph?`, '', 'This replaces what the graph is showing now.'];
+    if (info.hasData) lines.push('The downloaded data currently in the graph will be discarded.');
+    if (info.view === 'live') {
+      lines.push('The live view is hidden while this is shown. Live readings keep being collected in the background, and the Live button brings the view back.');
     }
+    return confirm(lines.join('\n'));
+  }
+
+  // Reads every sample of a recording (or reuses them if already downloaded). `button` turns into Cancel while it runs.
+  async function loadSamples(info, button, label, others = []) {
+    const meter = getMeter();
+    if (!meter) return null;
+    const key = `${info.readingIndex}:${info.start}`;
+    if (sampleCache.has(key)) return { samples: sampleCache.get(key), cancelled: false };
     abort = new AbortController();
     button.textContent = 'Cancel';
+    others.forEach((b) => (b.disabled = true));
     setBusy(true);
     try {
       const samples = await readerFor(meter).recordingSamples(info, {
@@ -143,21 +164,41 @@ export function initMemory({ counts, message, body, readButton, csvButton, getMe
         onProgress: (done, total) => say(`Reading "${info.name}": sample ${done} of ${total}…`),
       });
       const cancelled = abort.signal.aborted;
-      const rows = samples.map((s, i) => [i + 1, when(s.start), when(s.end), s.count, s.recordType, s.stable,
-        s.primary.PRIMARY?.value, s.stats.MAXIMUM?.value, s.average, s.stats.MINIMUM?.value, s.primary.PRIMARY?.unit]);
-      if (samples.length) showTrend(recordingTrend(info, samples));
-      if (rows.length) {
-        download(`fluke287-${safe(info.name)}-${stamp()}.csv`,
-          toCsv(['sample', 'start', 'end', 'readings', 'type', 'stable', 'primary', 'maximum', 'average', 'minimum', 'unit'], rows));
-      }
-      say(`${cancelled ? 'Cancelled after' : 'Saved'} ${rows.length} of ${info.sampleCount} samples`);
+      if (!cancelled) sampleCache.set(key, samples);
+      return { samples, cancelled };
     } catch (e) {
-      say(`Recording download failed: ${e.message}`, true);
+      say(`Reading "${info.name}" failed: ${e.message}`, true);
+      return null;
     } finally {
       abort = null;
-      button.textContent = 'Download samples';
+      button.textContent = label;
+      others.forEach((b) => (b.disabled = false));
       setBusy(false);
     }
+  }
+
+  // Plots a recording in the graph, after a warning; samples are read first if they have not been downloaded yet.
+  async function viewRecording(info, button) {
+    if (abort) return abort.abort();
+    if (!confirmReplace(`the recording "${info.name}"`)) return;
+    const result = await loadSamples(info, button, 'View in graph');
+    if (!result?.samples.length) return;
+    showTrend(recordingTrend(info, result.samples));
+    say(`${result.cancelled ? 'Showing the first' : 'Showing'} ${result.samples.length} of ${info.sampleCount} samples in the graph`);
+  }
+
+  function viewSession(item, label) {
+    const trend = sessionTrend(item, label);
+    if (!trend || !confirmReplace(`the ${label.toLowerCase()} "${item.name}"`)) return;
+    showTrend(trend);
+    say(`Showing the ${label.toLowerCase()} in the graph`);
+  }
+
+  function viewMeasurements() {
+    const trend = data && measurementsTrend(data.measurements);
+    if (!trend || !confirmReplace('the saved measurements')) return;
+    showTrend(trend);
+    say('Showing the saved measurements in the graph');
   }
 
   // Reading the counts is one quick command, so it runs on connect.
@@ -200,9 +241,7 @@ export function initMemory({ counts, message, body, readButton, csvButton, getMe
       }
       data = result;
       render();
-      const trend = measurementsTrend(result.measurements);
-      if (trend) showTrend(trend);
-      csvButton.disabled = !(result.measurements.length || result.minMax.length || result.peak.length);
+      viewButton.disabled = !measurementsTrend(result.measurements);
       say(`Done: ${summaryText(summary)}`);
     } catch (e) {
       say(`Could not read memory: ${e.message}`, true);
@@ -212,26 +251,8 @@ export function initMemory({ counts, message, body, readButton, csvButton, getMe
     }
   }
 
-  // One row per stored reading, for the items that hold values directly (recordings have their own download).
-  function exportCsv() {
-    if (!data) return;
-    const rows = [];
-    const add = (kind, { index, item }) => {
-      if (!item) return;
-      for (const r of Object.values(item.readings)) {
-        rows.push([kind, index + 1, item.name, when(item.start ?? r.time), item.end ? when(item.end) : '',
-          item.primaryFunction, r.id, r.value, r.unit, r.state]);
-      }
-    };
-    data.measurements.forEach((m) => add('measurement', m));
-    data.minMax.forEach((m) => add('minmax', m));
-    data.peak.forEach((m) => add('peak', m));
-    download(`fluke287-memory-${stamp()}.csv`,
-      toCsv(['kind', 'index', 'name', 'start', 'end', 'function', 'reading', 'value_base_units', 'unit', 'state'], rows));
-  }
-
   readButton.onclick = readAll;
-  csvButton.onclick = exportCsv;
+  viewButton.onclick = viewMeasurements;
 
   return {
     loadSummary,
@@ -240,7 +261,8 @@ export function initMemory({ counts, message, body, readButton, csvButton, getMe
       reader = readerMeter = null;
       body.replaceChildren();
       counts.textContent = '';
-      csvButton.disabled = true;
+      viewButton.disabled = true;
+      sampleCache.clear();
       say('');
     },
   };

@@ -1,6 +1,7 @@
 import { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
 import { LiveGraph } from './graph.js';
-import { pointsToText } from './graph-text.js';
+import { pointsToTable, pointsToText } from './graph-text.js';
+import { toCsv } from './csv.js';
 import { initMemory } from './memory-ui.js';
 import { Meter, MeterError } from './meter.js';
 import { initSettings } from './settings-ui.js';
@@ -11,8 +12,6 @@ const $ = (id) => document.getElementById(id);
 let meter = null;
 let polling = false;
 let failures = 0;
-let recording = false;
-let rows = [];
 
 let dataTitle = '';
 let liveZoom = '40';
@@ -62,7 +61,6 @@ function setConnected(connected) {
   $('connect').disabled = connected || !WebSerialTransport.supported;
   $('choose').disabled = connected || !WebSerialTransport.supported;
   $('disconnect').disabled = !connected;
-  $('record').disabled = !connected;
   document.body.classList.toggle('connected', connected);
   $('settingsState').textContent = connected ? '' : 'meter settings need a connection';
   $('memoryCard').hidden = !connected;
@@ -77,7 +75,8 @@ const memory = initMemory({
   message: $('memoryMsg'),
   body: $('memoryBody'),
   readButton: $('memoryRead'),
-  csvButton: $('memoryCsv'),
+  viewButton: $('memoryView'),
+  graphInfo: () => ({ hasData: graph.hasData, view: graph.view }),
   getMeter: () => meter,
   setBusy: (busy) => (paused = busy),
   showTrend: ({ title, unit, style, points }) => {
@@ -236,48 +235,17 @@ function render(d) {
 
   // The graph plots base units (V, A, Ω…) so a range change doesn't jump the trace.
   const now = Date.now();
-  graph.add(now, main.state === 'NORMAL' ? main.value : NaN, unitSymbol(main.baseUnit));
+  graph.add(now, main.state === 'NORMAL' ? main.value : NaN, unitSymbol(main.baseUnit), main.state);
   $('yUnit').textContent = unitSymbol(main.baseUnit);
   if (graph.view === 'live') {
     $('graphTitle').textContent = `${prettyFunction(d.primaryFunction)} over time`;
     $('graphCount').textContent = `${graph.length} samples`;
   }
-
-  if (recording) {
-    rows.push([
-      new Date(now).toISOString(),
-      new Date(main.timestamp * 1000).toISOString(),
-      d.primaryFunction,
-      main.value,
-      main.baseUnit,
-      main.state,
-    ]);
-    $('count').textContent = `${rows.length} samples`;
-    $('export').disabled = false;
-  }
-}
-
-function exportCsv() {
-  const header = 'computer_time,meter_time,function,value_base_units,unit,state';
-  const csv = [header, ...rows.map((r) => r.join(','))].join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = `fluke287-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
 }
 
 $('connect').onclick = () => connect();
 $('choose').onclick = () => connect({ choose: true });
 $('disconnect').onclick = () => disconnect();
-$('record').onclick = () => {
-  recording = !recording;
-  if (recording) rows = [];
-  $('record').textContent = recording ? 'Stop recording' : 'Record';
-  $('count').textContent = recording ? '0 samples' : $('count').textContent;
-  $('export').disabled = rows.length === 0;
-};
-$('export').onclick = exportCsv;
 $('zoom').onchange = (e) => {
   if (graph.view === 'live') liveZoom = e.target.value;
   graph.setScale(e.target.value === 'fit' ? 'fit' : Number(e.target.value));
@@ -368,17 +336,36 @@ function graphImage() {
   return canvas;
 }
 
-$('exportJpg').onclick = () => {
-  const canvas = graphImage();
-  canvas?.toBlob((blob) => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `fluke287-graph-${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+// Everything is exported from here, for whatever the graph shows (live or downloaded from the meter).
+const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
+const fileStem = () => `fluke287-${$('graphTitle').textContent.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48) || 'graph'}`;
+
+function saveBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportJpg() {
+  graphImage()?.toBlob((blob) => {
+    saveBlob(blob, `${fileStem()}-${stamp()}.jpg`);
     graphMessage('Saved JPG');
   }, 'image/jpeg', 0.92);
-};
+}
+
+// Every point of what the graph shows (not just the visible part): time, value, and min/max or state when present.
+function exportCsv() {
+  const points = graph.allPoints();
+  if (!points.length) return graphMessage('Nothing to export yet');
+  const { header, rows } = pointsToTable(points, graph.unit);
+  saveBlob(new Blob([toCsv(header, rows)], { type: 'text/csv' }), `${fileStem()}-${stamp()}.csv`);
+  graphMessage(`Saved CSV with ${points.length} points`);
+}
+$('exportJpg').onclick = exportJpg;
+$('exportCsv').onclick = exportCsv;
+$('copyValues').onclick = () => copyValues(false);
 
 async function copyImage() {
   const canvas = graphImage();
@@ -415,8 +402,10 @@ $('graphScroll').addEventListener('contextmenu', (e) => {
   const y = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 8);
   menu.style.left = `${Math.max(8, x)}px`;
   menu.style.top = `${Math.max(8, y)}px`;
-  $('ctxVisible').focus();
+  $('ctxCsv').focus();
 });
+$('ctxCsv').onclick = () => (closeMenu(), exportCsv());
+$('ctxJpg').onclick = () => (closeMenu(), exportJpg());
 $('ctxVisible').onclick = () => (closeMenu(), copyValues(false));
 $('ctxAll').onclick = () => (closeMenu(), copyValues(true));
 $('ctxImage').onclick = () => (closeMenu(), copyImage());

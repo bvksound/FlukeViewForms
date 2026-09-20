@@ -141,6 +141,7 @@
   .memory .bad,#memoryMsg.bad{color:var(--red);}
   #memoryBody{margin-top:8px;}
   .mem-block{margin-top:18px;padding:0;}
+  .row-actions{display:flex;flex-wrap:wrap;gap:6px;}
   .mem-block h4{margin:0 0 8px;font-size:13px;font-family:var(--mono);letter-spacing:.06em;color:var(--muted);font-weight:600;}
   .mem-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);}
   .mem-scroll table{border-collapse:collapse;width:100%;font-size:13px;}
@@ -197,6 +198,7 @@
   body.connected .meter-only{display:block;}
   .ctx{position:fixed;z-index:100;min-width:230px;background:#121a21;border:1px solid #2a3641;border-radius:10px;padding:6px;box-shadow:0 18px 44px -12px rgba(0,0,0,.75);}
   .ctx button{display:block;width:100%;text-align:left;background:none;border:none;border-radius:6px;padding:9px 12px;font:inherit;font-size:14px;color:var(--text);cursor:pointer;}
+  .ctx hr{border:none;border-top:1px solid #26313b;margin:6px 0;}
   .ctx button:hover,.ctx button:focus-visible{background:rgba(63,209,199,.14);outline:none;}
   .seg{display:inline-flex;}
   .seg .btn{border-radius:0;}
@@ -264,11 +266,7 @@
         </div>
         <div id="secondary"></div>
         <div class="stats" id="stats"></div>
-        <div class="controls">
-          <button id="record" class="btn btn-ghost btn-sm" disabled>Record</button>
-          <button id="export" class="btn btn-ghost btn-sm" disabled>Export CSV</button>
-          <span id="count"></span>
-        </div>
+        <p class="hint" style="margin:14px 0 0">Everything is shown in the graph below first, live or from the meter's memory. Export it from there.</p>
       </details>
 
       <details class="card collapsible graph-card" id="graphCard" open>
@@ -296,7 +294,9 @@
           <button id="live" class="btn btn-ghost btn-sm" disabled>Jump to live</button>
           <button id="clearGraph" class="btn btn-ghost btn-sm">Clear graph</button>
           <span class="spacer"></span>
+          <button id="exportCsv" class="btn btn-ghost btn-sm" title="Save every point of what the graph shows as a CSV file">Export CSV</button>
           <button id="exportJpg" class="btn btn-ghost btn-sm" title="Save the visible part of the graph as a JPG image">Export JPG</button>
+          <button id="copyValues" class="btn btn-ghost btn-sm" title="Copy the visible x,y values as text">Copy values</button>
           <button id="copyGraph" class="btn btn-ghost btn-sm" title="Copy the visible part of the graph to the clipboard as an image">Copy image</button>
           <span id="graphMsg" class="hint" role="status"></span>
         </div>
@@ -315,6 +315,9 @@
       </details>
 
       <div id="graphMenu" class="ctx" role="menu" aria-label="Graph" hidden>
+        <button role="menuitem" id="ctxCsv">Export CSV</button>
+        <button role="menuitem" id="ctxJpg">Export JPG</button>
+        <hr>
         <button role="menuitem" id="ctxVisible">Copy visible x,y values</button>
         <button role="menuitem" id="ctxAll">Copy all x,y values</button>
         <button role="menuitem" id="ctxImage">Copy image</button>
@@ -323,10 +326,10 @@
       <details class="card collapsible memory" id="memoryCard" open hidden>
         <summary class="meta"><span class="title">Meter memory</span><span class="grow"></span><span id="memoryCounts"></span></summary>
         <p class="hint" style="margin:14px 0 12px">Reads what is stored on the meter: saved measurements, min/max and peak sessions, and recordings.
-          Saved measurements and downloaded recordings are plotted in the graph above. Read-only: nothing on the meter is changed or erased.</p>
+          Use View in graph to plot saved measurements, a recording or a min/max or peak session in the graph above, where it can be exported. Read-only: nothing on the meter is changed or erased.</p>
         <div class="controls" style="margin-top:0">
           <button id="memoryRead" class="btn btn-primary btn-sm">Read memory</button>
-          <button id="memoryCsv" class="btn btn-ghost btn-sm" disabled>Download CSV</button>
+          <button id="memoryView" class="btn btn-ghost btn-sm" disabled title="Plot the saved measurements in the graph above (replaces what the graph shows now)">View saved measurements in graph</button>
           <span id="memoryMsg" class="hint" role="status"></span>
         </div>
         <div id="memoryBody"></div>
@@ -716,12 +719,12 @@ class LiveGraph {
   }
 
   // `unit` is the base unit's symbol; a different unit than before starts a fresh trace.
-  add(t, value, unit) {
+  add(t, value, unit, state) {
     if (unit !== this.#liveUnit) {
       this.#live = [];
       this.#liveUnit = unit;
     }
-    this.#live.push({ t, v: value });
+    this.#live.push({ t, v: value, state });
     if (this.#live.length > MAX_POINTS) this.#trim(MAX_POINTS / 10);
     if (this.#view === 'live') this.#layout();
   }
@@ -1080,17 +1083,27 @@ function localTimestamp(ms) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
 }
 
-// x = time, y = value in base units; band columns (min, max) appear when the data has them (recordings).
-function pointsToText(points, unit = '', { sep = '\t' } = {}) {
+// The graph's data as a table: x = time, y = value in base units. Band columns (min, max) appear when the data has
+// them (recordings), and a state column (OL, INVALID…) when any reading was not a normal one.
+function pointsToTable(points, unit = '') {
   const band = points.some((p) => Number.isFinite(p.lo) || Number.isFinite(p.hi));
+  const withState = points.some((p) => p.state && p.state !== 'NORMAL');
   const num = (v) => (Number.isFinite(v) ? String(v) : '');
   const label = unit ? `_${unit}` : '';
-  const header = ['time', `value${label}`, ...(band ? [`min${label}`, `max${label}`] : [])];
-  const rows = points.map((p) => [localTimestamp(p.t), num(p.v), ...(band ? [num(p.lo), num(p.hi)] : [])]);
+  const header = ['time', `value${label}`, ...(band ? [`min${label}`, `max${label}`] : []), ...(withState ? ['state'] : [])];
+  const rows = points.map((p) => [
+    localTimestamp(p.t), num(p.v), ...(band ? [num(p.lo), num(p.hi)] : []), ...(withState ? [p.state ?? ''] : []),
+  ]);
+  return { header, rows };
+}
+
+// Tab-separated text for the clipboard: pastes into a spreadsheet or a text editor.
+function pointsToText(points, unit = '', { sep = '\t' } = {}) {
+  const { header, rows } = pointsToTable(points, unit);
   return [header, ...rows].map((r) => r.join(sep)).join('\n') + '\n';
 }
 
-  return { localTimestamp, pointsToText };
+  return { localTimestamp, pointsToTable, pointsToText };
 })();
 
 __modules["csv"] = (() => {
@@ -1551,7 +1564,6 @@ function localClockText(date = new Date()) {
 })();
 
 __modules["memory-ui"] = (() => {
-  const { toCsv } = __modules["csv"];
   const { formatReading, prettyFunction, unitSymbol } = __modules["format"];
   const { MemoryReader } = __modules["memory"];
   const { meterClockToText, meterSecondsToLocalMs } = __modules["settings"];
@@ -1564,8 +1576,6 @@ function el(tag, props = {}, ...children) {
 }
 
 const when = (seconds) => meterClockToText(seconds);
-const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
-const safe = (name) => name.replace(/[^\w.-]+/g, '_').slice(0, 40) || 'recording';
 
 // A stored reading as the meter would have displayed it.
 function show(r) {
@@ -1574,25 +1584,19 @@ function show(r) {
   return `${f.text} ${f.unit}${f.coupling ? ` ${f.coupling}` : ''}`.trim();
 }
 
-function download(filename, text) {
-  const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/csv' })), download: filename });
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
 const usable = (r) => (r.state === 'NORMAL' ? r.value : NaN);
 
 // Saved measurements as dots over time (all in the unit most of them share).
 function measurementsTrend(entries) {
   const items = entries.filter((e) => e.item).map((e) => {
     const r = e.item.readings.PRIMARY ?? Object.values(e.item.readings)[0];
-    return r && { t: meterSecondsToLocalMs(r.time), v: usable(r), unit: r.unit };
+    return r && { t: meterSecondsToLocalMs(r.time), v: usable(r), unit: r.unit, state: r.state };
   }).filter(Boolean);
   if (!items.length) return null;
   const counts = new Map();
   items.forEach((i) => counts.set(i.unit, (counts.get(i.unit) ?? 0) + 1));
   const [unit] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
-  const points = items.filter((i) => i.unit === unit).map(({ t, v }) => ({ t, v }));
+  const points = items.filter((i) => i.unit === unit).map(({ t, v, state }) => ({ t, v, state }));
   const skipped = items.length - points.length;
   return {
     title: `Saved measurements: ${points.length}${skipped ? ` (${skipped} in other units not shown)` : ''}`,
@@ -1610,6 +1614,7 @@ function recordingTrend(info, samples) {
     return {
       t: meterSecondsToLocalMs(s.start),
       v: ok ? s.average : NaN,
+      state: s.stats.AVERAGE?.state,
       lo: s.stats.MINIMUM ? usable(s.stats.MINIMUM) : NaN,
       hi: s.stats.MAXIMUM ? usable(s.stats.MAXIMUM) : NaN,
     };
@@ -1617,11 +1622,24 @@ function recordingTrend(info, samples) {
   return { title: `Recording "${info.name}": ${samples.length} samples`, unit: unitSymbol(unit), style: 'line', points };
 }
 
-function initMemory({ counts, message, body, readButton, csvButton, getMeter, setBusy, showTrend = () => {} }) {
+// A min/max or peak session as dots: one per stored reading (minimum, maximum, average…), at its own time.
+function sessionTrend(item, label) {
+  const readings = Object.values(item.readings);
+  if (!readings.length) return null;
+  const unit = readings[0].unit;
+  const points = readings.filter((r) => r.unit === unit).map((r) => ({ t: meterSecondsToLocalMs(r.time), v: usable(r), state: r.state }));
+  return { title: `${label} "${item.name}": ${points.length} readings`, unit: unitSymbol(unit), style: 'points', points };
+}
+
+function initMemory({
+  counts, message, body, readButton, viewButton, getMeter, setBusy,
+  showTrend = () => {}, graphInfo = () => ({ hasData: false, view: 'live' }),
+}) {
   let reader = null;
   let readerMeter = null;
   let data = null;
   let abort = null;
+  const sampleCache = new Map(); // downloaded recording samples, so viewing after downloading (or twice) is instant
 
   const say = (text, bad = false) => {
     message.textContent = text;
@@ -1664,31 +1682,47 @@ function initMemory({ counts, message, body, readButton, csvButton, getMeter, se
     }
     for (const [title, list] of [['Min / max sessions', minMax], ['Peak sessions', peak]]) {
       if (!list.length) continue;
-      body.append(table(title, ['#', 'Name', 'Start', 'End', 'Function', 'Readings'],
-        list.map(({ index, item, error }) => (error ? [`${index + 1}`, ...failed(error)]
-          : [`${index + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction),
-            Object.values(item.readings).map((r) => `${r.id.toLowerCase()} ${show(r)}`).join(' · ')]))));
+      const label = title.startsWith('Peak') ? 'Peak session' : 'Min/max session';
+      body.append(table(title, ['#', 'Name', 'Start', 'End', 'Function', 'Readings', ''],
+        list.map(({ index, item, error }) => {
+          if (error) return [`${index + 1}`, ...failed(error)];
+          const view = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'View in graph' });
+          view.onclick = () => viewSession(item, label);
+          return [`${index + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction),
+            Object.values(item.readings).map((r) => `${r.id.toLowerCase()} ${show(r)}`).join(' · '), view];
+        })));
     }
     if (recordings.length) {
       body.append(table('Recordings', ['#', 'Name', 'Start', 'End', 'Interval', 'Samples', ''],
         recordings.map(({ index, item, error }) => {
           if (error) return [`${index + 1}`, ...failed(error)];
-          const button = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'Download samples' });
-          button.onclick = () => downloadRecording(item, button);
-          return [`${index + 1}`, item.name, when(item.start), when(item.end), `${item.sampleInterval} s`, `${item.sampleCount}`, button];
+          const view = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'View in graph' });
+          view.onclick = () => viewRecording(item, view);
+          return [`${index + 1}`, item.name, when(item.start), when(item.end), `${item.sampleInterval} s`, `${item.sampleCount}`, view];
         })));
     }
   }
 
-  async function downloadRecording(info, button) {
-    const meter = getMeter();
-    if (!meter) return;
-    if (abort) {
-      abort.abort();
-      return;
+  // What the graph is showing now, and what replacing it would discard, spelled out before anything is replaced.
+  function confirmReplace(what) {
+    const info = graphInfo();
+    const lines = [`Show ${what} in the graph?`, '', 'This replaces what the graph is showing now.'];
+    if (info.hasData) lines.push('The downloaded data currently in the graph will be discarded.');
+    if (info.view === 'live') {
+      lines.push('The live view is hidden while this is shown. Live readings keep being collected in the background, and the Live button brings the view back.');
     }
+    return confirm(lines.join('\n'));
+  }
+
+  // Reads every sample of a recording (or reuses them if already downloaded). `button` turns into Cancel while it runs.
+  async function loadSamples(info, button, label, others = []) {
+    const meter = getMeter();
+    if (!meter) return null;
+    const key = `${info.readingIndex}:${info.start}`;
+    if (sampleCache.has(key)) return { samples: sampleCache.get(key), cancelled: false };
     abort = new AbortController();
     button.textContent = 'Cancel';
+    others.forEach((b) => (b.disabled = true));
     setBusy(true);
     try {
       const samples = await readerFor(meter).recordingSamples(info, {
@@ -1696,21 +1730,41 @@ function initMemory({ counts, message, body, readButton, csvButton, getMeter, se
         onProgress: (done, total) => say(`Reading "${info.name}": sample ${done} of ${total}…`),
       });
       const cancelled = abort.signal.aborted;
-      const rows = samples.map((s, i) => [i + 1, when(s.start), when(s.end), s.count, s.recordType, s.stable,
-        s.primary.PRIMARY?.value, s.stats.MAXIMUM?.value, s.average, s.stats.MINIMUM?.value, s.primary.PRIMARY?.unit]);
-      if (samples.length) showTrend(recordingTrend(info, samples));
-      if (rows.length) {
-        download(`fluke287-${safe(info.name)}-${stamp()}.csv`,
-          toCsv(['sample', 'start', 'end', 'readings', 'type', 'stable', 'primary', 'maximum', 'average', 'minimum', 'unit'], rows));
-      }
-      say(`${cancelled ? 'Cancelled after' : 'Saved'} ${rows.length} of ${info.sampleCount} samples`);
+      if (!cancelled) sampleCache.set(key, samples);
+      return { samples, cancelled };
     } catch (e) {
-      say(`Recording download failed: ${e.message}`, true);
+      say(`Reading "${info.name}" failed: ${e.message}`, true);
+      return null;
     } finally {
       abort = null;
-      button.textContent = 'Download samples';
+      button.textContent = label;
+      others.forEach((b) => (b.disabled = false));
       setBusy(false);
     }
+  }
+
+  // Plots a recording in the graph, after a warning; samples are read first if they have not been downloaded yet.
+  async function viewRecording(info, button) {
+    if (abort) return abort.abort();
+    if (!confirmReplace(`the recording "${info.name}"`)) return;
+    const result = await loadSamples(info, button, 'View in graph');
+    if (!result?.samples.length) return;
+    showTrend(recordingTrend(info, result.samples));
+    say(`${result.cancelled ? 'Showing the first' : 'Showing'} ${result.samples.length} of ${info.sampleCount} samples in the graph`);
+  }
+
+  function viewSession(item, label) {
+    const trend = sessionTrend(item, label);
+    if (!trend || !confirmReplace(`the ${label.toLowerCase()} "${item.name}"`)) return;
+    showTrend(trend);
+    say(`Showing the ${label.toLowerCase()} in the graph`);
+  }
+
+  function viewMeasurements() {
+    const trend = data && measurementsTrend(data.measurements);
+    if (!trend || !confirmReplace('the saved measurements')) return;
+    showTrend(trend);
+    say('Showing the saved measurements in the graph');
   }
 
   // Reading the counts is one quick command, so it runs on connect.
@@ -1753,9 +1807,7 @@ function initMemory({ counts, message, body, readButton, csvButton, getMeter, se
       }
       data = result;
       render();
-      const trend = measurementsTrend(result.measurements);
-      if (trend) showTrend(trend);
-      csvButton.disabled = !(result.measurements.length || result.minMax.length || result.peak.length);
+      viewButton.disabled = !measurementsTrend(result.measurements);
       say(`Done: ${summaryText(summary)}`);
     } catch (e) {
       say(`Could not read memory: ${e.message}`, true);
@@ -1765,26 +1817,8 @@ function initMemory({ counts, message, body, readButton, csvButton, getMeter, se
     }
   }
 
-  // One row per stored reading, for the items that hold values directly (recordings have their own download).
-  function exportCsv() {
-    if (!data) return;
-    const rows = [];
-    const add = (kind, { index, item }) => {
-      if (!item) return;
-      for (const r of Object.values(item.readings)) {
-        rows.push([kind, index + 1, item.name, when(item.start ?? r.time), item.end ? when(item.end) : '',
-          item.primaryFunction, r.id, r.value, r.unit, r.state]);
-      }
-    };
-    data.measurements.forEach((m) => add('measurement', m));
-    data.minMax.forEach((m) => add('minmax', m));
-    data.peak.forEach((m) => add('peak', m));
-    download(`fluke287-memory-${stamp()}.csv`,
-      toCsv(['kind', 'index', 'name', 'start', 'end', 'function', 'reading', 'value_base_units', 'unit', 'state'], rows));
-  }
-
   readButton.onclick = readAll;
-  csvButton.onclick = exportCsv;
+  viewButton.onclick = viewMeasurements;
 
   return {
     loadSummary,
@@ -1793,13 +1827,14 @@ function initMemory({ counts, message, body, readButton, csvButton, getMeter, se
       reader = readerMeter = null;
       body.replaceChildren();
       counts.textContent = '';
-      csvButton.disabled = true;
+      viewButton.disabled = true;
+      sampleCache.clear();
       say('');
     },
   };
 }
 
-  return { measurementsTrend, recordingTrend, initMemory };
+  return { measurementsTrend, recordingTrend, sessionTrend, initMemory };
 })();
 
 __modules["transport"] = (() => {
@@ -2323,7 +2358,8 @@ function initSettings({ containers, message, getMeter }) {
 __modules["app"] = (() => {
   const { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } = __modules["format"];
   const { LiveGraph } = __modules["graph"];
-  const { pointsToText } = __modules["graph-text"];
+  const { pointsToTable, pointsToText } = __modules["graph-text"];
+  const { toCsv } = __modules["csv"];
   const { initMemory } = __modules["memory-ui"];
   const { Meter, MeterError } = __modules["meter"];
   const { initSettings } = __modules["settings-ui"];
@@ -2334,8 +2370,6 @@ const $ = (id) => document.getElementById(id);
 let meter = null;
 let polling = false;
 let failures = 0;
-let recording = false;
-let rows = [];
 
 let dataTitle = '';
 let liveZoom = '40';
@@ -2385,7 +2419,6 @@ function setConnected(connected) {
   $('connect').disabled = connected || !WebSerialTransport.supported;
   $('choose').disabled = connected || !WebSerialTransport.supported;
   $('disconnect').disabled = !connected;
-  $('record').disabled = !connected;
   document.body.classList.toggle('connected', connected);
   $('settingsState').textContent = connected ? '' : 'meter settings need a connection';
   $('memoryCard').hidden = !connected;
@@ -2400,7 +2433,8 @@ const memory = initMemory({
   message: $('memoryMsg'),
   body: $('memoryBody'),
   readButton: $('memoryRead'),
-  csvButton: $('memoryCsv'),
+  viewButton: $('memoryView'),
+  graphInfo: () => ({ hasData: graph.hasData, view: graph.view }),
   getMeter: () => meter,
   setBusy: (busy) => (paused = busy),
   showTrend: ({ title, unit, style, points }) => {
@@ -2559,48 +2593,17 @@ function render(d) {
 
   // The graph plots base units (V, A, Ω…) so a range change doesn't jump the trace.
   const now = Date.now();
-  graph.add(now, main.state === 'NORMAL' ? main.value : NaN, unitSymbol(main.baseUnit));
+  graph.add(now, main.state === 'NORMAL' ? main.value : NaN, unitSymbol(main.baseUnit), main.state);
   $('yUnit').textContent = unitSymbol(main.baseUnit);
   if (graph.view === 'live') {
     $('graphTitle').textContent = `${prettyFunction(d.primaryFunction)} over time`;
     $('graphCount').textContent = `${graph.length} samples`;
   }
-
-  if (recording) {
-    rows.push([
-      new Date(now).toISOString(),
-      new Date(main.timestamp * 1000).toISOString(),
-      d.primaryFunction,
-      main.value,
-      main.baseUnit,
-      main.state,
-    ]);
-    $('count').textContent = `${rows.length} samples`;
-    $('export').disabled = false;
-  }
-}
-
-function exportCsv() {
-  const header = 'computer_time,meter_time,function,value_base_units,unit,state';
-  const csv = [header, ...rows.map((r) => r.join(','))].join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = `fluke287-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
 }
 
 $('connect').onclick = () => connect();
 $('choose').onclick = () => connect({ choose: true });
 $('disconnect').onclick = () => disconnect();
-$('record').onclick = () => {
-  recording = !recording;
-  if (recording) rows = [];
-  $('record').textContent = recording ? 'Stop recording' : 'Record';
-  $('count').textContent = recording ? '0 samples' : $('count').textContent;
-  $('export').disabled = rows.length === 0;
-};
-$('export').onclick = exportCsv;
 $('zoom').onchange = (e) => {
   if (graph.view === 'live') liveZoom = e.target.value;
   graph.setScale(e.target.value === 'fit' ? 'fit' : Number(e.target.value));
@@ -2691,17 +2694,36 @@ function graphImage() {
   return canvas;
 }
 
-$('exportJpg').onclick = () => {
-  const canvas = graphImage();
-  canvas?.toBlob((blob) => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `fluke287-graph-${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+// Everything is exported from here, for whatever the graph shows (live or downloaded from the meter).
+const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
+const fileStem = () => `fluke287-${$('graphTitle').textContent.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48) || 'graph'}`;
+
+function saveBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportJpg() {
+  graphImage()?.toBlob((blob) => {
+    saveBlob(blob, `${fileStem()}-${stamp()}.jpg`);
     graphMessage('Saved JPG');
   }, 'image/jpeg', 0.92);
-};
+}
+
+// Every point of what the graph shows (not just the visible part): time, value, and min/max or state when present.
+function exportCsv() {
+  const points = graph.allPoints();
+  if (!points.length) return graphMessage('Nothing to export yet');
+  const { header, rows } = pointsToTable(points, graph.unit);
+  saveBlob(new Blob([toCsv(header, rows)], { type: 'text/csv' }), `${fileStem()}-${stamp()}.csv`);
+  graphMessage(`Saved CSV with ${points.length} points`);
+}
+$('exportJpg').onclick = exportJpg;
+$('exportCsv').onclick = exportCsv;
+$('copyValues').onclick = () => copyValues(false);
 
 async function copyImage() {
   const canvas = graphImage();
@@ -2738,8 +2760,10 @@ $('graphScroll').addEventListener('contextmenu', (e) => {
   const y = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 8);
   menu.style.left = `${Math.max(8, x)}px`;
   menu.style.top = `${Math.max(8, y)}px`;
-  $('ctxVisible').focus();
+  $('ctxCsv').focus();
 });
+$('ctxCsv').onclick = () => (closeMenu(), exportCsv());
+$('ctxJpg').onclick = () => (closeMenu(), exportJpg());
 $('ctxVisible').onclick = () => (closeMenu(), copyValues(false));
 $('ctxAll').onclick = () => (closeMenu(), copyValues(true));
 $('ctxImage').onclick = () => (closeMenu(), copyImage());

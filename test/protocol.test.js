@@ -4,10 +4,10 @@ import { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, pa
 import { Meter, MeterError } from '../src/meter.js';
 import { MockTransport } from './mock-meter.js';
 import { ProtocolError, parseAck, parseId, parseQdda, parseQm } from '../src/protocol.js';
-import { measurementsTrend, recordingTrend } from '../src/memory-ui.js';
+import { measurementsTrend, recordingTrend, sessionTrend } from '../src/memory-ui.js';
 import { clockValueFor, localClockText, meterClockToText, meterSecondsToLocalMs, minutesToSeconds, secondsToMinutes } from '../src/settings.js';
 import { toCsv } from '../src/csv.js';
-import { localTimestamp, pointsToText } from '../src/graph-text.js';
+import { localTimestamp, pointsToTable, pointsToText } from '../src/graph-text.js';
 import { LineBuffer, TimeoutError } from '../src/transport.js';
 
 // Examples taken from the Fluke 289/287 Remote Interface Specification.
@@ -240,4 +240,29 @@ test('pointsToText: tab-separated x,y values with local time, gaps for overloads
     'time\tvalue_V\n2026-09-20 14:05:00.250\t0.005\n2026-09-20 14:05:01.250\t\n');
   assert.equal(pointsToText([{ t, v: 2, lo: 1, hi: 3 }], 'A'), 'time\tvalue_A\tmin_A\tmax_A\n2026-09-20 14:05:00.250\t2\t1\t3\n');
   assert.equal(pointsToText([], ''), 'time\tvalue\n');
+});
+
+test('pointsToTable: state column only when a reading was not normal; same table feeds CSV', () => {
+  const t = new Date(2026, 8, 20, 14, 5, 0, 0).getTime();
+  const clean = pointsToTable([{ t, v: 1, state: 'NORMAL' }], 'V');
+  assert.deepEqual(clean.header, ['time', 'value_V']);
+  const withOl = pointsToTable([{ t, v: 1, state: 'NORMAL' }, { t: t + 1000, v: NaN, state: 'OL' }], 'V');
+  assert.deepEqual(withOl.header, ['time', 'value_V', 'state']);
+  assert.deepEqual(withOl.rows[1], ['2026-09-20 14:05:01.000', '', 'OL']);
+  assert.equal(toCsv(withOl.header, withOl.rows), 'time,value_V,state\r\n2026-09-20 14:05:00.000,1,NORMAL\r\n2026-09-20 14:05:01.000,,OL\r\n');
+});
+
+test('sessionTrend: a min/max session as dots, one per stored reading', () => {
+  const at = (h) => Date.UTC(2026, 8, 20, h, 0, 0) / 1000;
+  const item = { name: 'MM 1', readings: {
+    MINIMUM: { id: 'MINIMUM', value: -0.02, unit: 'VDC', state: 'NORMAL', time: at(9) },
+    MAXIMUM: { id: 'MAXIMUM', value: 4.9, unit: 'VDC', state: 'NORMAL', time: at(10) },
+    AVERAGE: { id: 'AVERAGE', value: 2.5, unit: 'VDC', state: 'OL', time: at(11) },
+  } };
+  const trend = sessionTrend(item, 'Min/max session');
+  assert.equal(trend.style, 'points');
+  assert.equal(trend.unit, 'V');
+  assert.match(trend.title, /Min\/max session "MM 1": 3 readings/);
+  assert.deepEqual(trend.points.map((p) => p.v).map((v) => (Number.isNaN(v) ? 'nan' : v)), [-0.02, 4.9, 'nan']);
+  assert.equal(sessionTrend({ name: 'x', readings: {} }, 'Peak session'), null);
 });

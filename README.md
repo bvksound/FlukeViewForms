@@ -30,10 +30,12 @@ scripts/sync-website.sh /path/to/website   # optional: builds and copies it into
 | Scrollable live graph, Y-axis auto/manual/zoom/pan | Working (tested against a fake serial port; verify on the meter) |
 | Remembered port, auto-connect | Working |
 | Battery level (four-bar icon) | Working |
-| Meter settings panel (clock sync, beeper, digits, timeouts, formats, owner fields, save slots) | Working; write syntax verified on a real 287 |
+| Settings page with tabs (Meter, Owner & save slots, Reset & tools, Viewer) | Working; write syntax verified on a real 287 |
 | Advanced: default setup, resets, raw command box | Working; resets not yet run on a real meter |
 | Record + CSV export | Working |
-| Read meter memory (saved measurements, recordings) | Commands known from open-source tools (see docs/protocol.md), not built yet |
+| Meter memory readout (saved measurements, min/max, peak, recordings, CSV) | Recordings verified on a real 287; saved measurements, min/max and peak decoders still untested on real data |
+| Downloaded data in the trend graph (dots for saved measurements, line + min/max band for recordings) | Working in the browser with a simulated meter |
+| Collapsible sections | Working, remembered between visits |
 | Form templates (logo, title, fields) | Planned: JSON templates in IndexedDB |
 | PDF export | Planned: client-side (pdf-lib or jsPDF) |
 
@@ -53,6 +55,10 @@ src/format.js     LCD-style formatting
 src/settings.js   settings definitions and clock helpers
 src/settings-ui.js the Meter settings panel
 src/graph.js      scrollable live graph
+src/records.js    binary memory record decoders
+src/memory.js     reads stored data from the meter
+src/memory-ui.js  the Meter memory panel
+src/csv.js        CSV output
 test/             node:test suites (mock-meter.js is a fake 287 used by the tests)
 scripts/          dev-server.mjs (serves site header/logo from the website folder), build.mjs, sync-website.sh
 images/           Fluke logo

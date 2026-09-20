@@ -1,5 +1,7 @@
 import { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
 import { LiveGraph } from './graph.js';
+import { pointsToText } from './graph-text.js';
+import { initMemory } from './memory-ui.js';
 import { Meter, MeterError } from './meter.js';
 import { initSettings } from './settings-ui.js';
 import { WebSerialTransport } from './transport.js';
@@ -12,13 +14,30 @@ let failures = 0;
 let recording = false;
 let rows = [];
 
+let dataTitle = '';
+let liveZoom = '40';
+
+// Reflects which dataset the graph shows: live buffer or downloaded memory data.
+function showGraphView(view) {
+  const data = view === 'data';
+  $('viewLive').setAttribute('aria-pressed', String(!data));
+  $('viewData').setAttribute('aria-pressed', String(data));
+  $('viewData').disabled = !graph.hasData;
+  $('dataHint').hidden = graph.hasData;
+  $('live').disabled = data ? false : graph.following;
+  $('zoom').value = data ? 'fit' : liveZoom;
+  $('graphTitle').textContent = data ? dataTitle : 'Reading over time';
+  $('graphCount').textContent = data ? `${graph.length} points` : `${graph.length} samples`;
+}
+
 const graph = new LiveGraph({
   scroll: $('graphScroll'),
   inner: $('graphInner'),
   canvas: $('graph'),
   onFollowChange: (following) => {
-    $('live').disabled = following;
+    if (graph.view === 'live') $('live').disabled = following;
   },
+  onViewChange: (view) => showGraphView(view),
   onRangeChange: (min, max, auto) => {
     $('yAuto').setAttribute('aria-pressed', String(auto));
     // Don't overwrite a limit while the user is typing it.
@@ -44,14 +63,33 @@ function setConnected(connected) {
   $('choose').disabled = connected || !WebSerialTransport.supported;
   $('disconnect').disabled = !connected;
   $('record').disabled = !connected;
-  $('settingsCard').hidden = !connected;
+  document.body.classList.toggle('connected', connected);
+  $('settingsState').textContent = connected ? '' : 'meter settings need a connection';
+  $('memoryCard').hidden = !connected;
   document.querySelectorAll('.needs-meter').forEach((el) => (el.disabled = !connected));
   $('readout').classList.toggle('stale', !connected);
 }
 
+// Memory reads share the IR link with the live polling, so polling pauses while they run.
+let paused = false;
+const memory = initMemory({
+  counts: $('memoryCounts'),
+  message: $('memoryMsg'),
+  body: $('memoryBody'),
+  readButton: $('memoryRead'),
+  csvButton: $('memoryCsv'),
+  getMeter: () => meter,
+  setBusy: (busy) => (paused = busy),
+  showTrend: ({ title, unit, style, points }) => {
+    dataTitle = title;
+    graph.setData({ points, unit, style });
+  },
+});
+
 const settings = initSettings({
-  basic: $('settingsBasic'),
-  advanced: $('settingsAdvanced'),
+  containers: {
+    display: $('setDisplay'), power: $('setPower'), measure: $('setMeasure'), owner: $('setOwner'), slots: $('setSlots'),
+  },
   message: $('settingsMsg'),
   getMeter: () => meter,
 });
@@ -73,6 +111,7 @@ async function connect({ choose = false } = {}) {
       setConnected(true);
       poll();
       settings.load();
+      memory.loadSummary();
     } catch (e) {
       await candidate.close();
       throw e;
@@ -98,6 +137,7 @@ async function disconnect(message = 'Not connected', kind = '') {
   setConnected(false);
   $('battery').hidden = true;
   settings.reset();
+  memory.reset();
   setStatus(message, kind);
 }
 
@@ -148,6 +188,10 @@ async function poll() {
   batteryChecked = 0;
   batterySupported = true;
   while (polling && meter) {
+    if (paused) {
+      await new Promise((r) => setTimeout(r, 200));
+      continue;
+    }
     const started = performance.now();
     try {
       render(await meter.queryDisplay());
@@ -171,6 +215,7 @@ function render(d) {
   $('unit').textContent = f.unit;
   $('coupling').textContent = f.coupling;
   $('func').textContent = prettyFunction(d.primaryFunction);
+  $('miniValue').textContent = `${f.text} ${f.unit} ${f.coupling}`.trim();
   $('modes').textContent = d.modes.map(prettyFunction).join(' · ');
 
   const sec = d.readings.SECONDARY;
@@ -193,8 +238,10 @@ function render(d) {
   const now = Date.now();
   graph.add(now, main.state === 'NORMAL' ? main.value : NaN, unitSymbol(main.baseUnit));
   $('yUnit').textContent = unitSymbol(main.baseUnit);
-  $('graphTitle').textContent = `${prettyFunction(d.primaryFunction)} over time`;
-  $('graphCount').textContent = `${graph.length} samples`;
+  if (graph.view === 'live') {
+    $('graphTitle').textContent = `${prettyFunction(d.primaryFunction)} over time`;
+    $('graphCount').textContent = `${graph.length} samples`;
+  }
 
   if (recording) {
     rows.push([
@@ -231,10 +278,16 @@ $('record').onclick = () => {
   $('export').disabled = rows.length === 0;
 };
 $('export').onclick = exportCsv;
-$('zoom').onchange = (e) => graph.setScale(Number(e.target.value));
-$('live').onclick = () => graph.jumpToLive();
+$('zoom').onchange = (e) => {
+  if (graph.view === 'live') liveZoom = e.target.value;
+  graph.setScale(e.target.value === 'fit' ? 'fit' : Number(e.target.value));
+};
+$('live').onclick = () => (graph.view === 'data' ? graph.showLive() : graph.jumpToLive());
+$('viewLive').onclick = () => graph.showLive();
+$('viewData').onclick = () => graph.showData();
 $('clearGraph').onclick = () => {
-  graph.clear();
+  graph.clear(); // in the downloaded view this drops that dataset and returns to live
+  showGraphView(graph.view);
   $('graphCount').textContent = '';
 };
 
@@ -327,7 +380,7 @@ $('exportJpg').onclick = () => {
   }, 'image/jpeg', 0.92);
 };
 
-$('copyGraph').onclick = async () => {
+async function copyImage() {
   const canvas = graphImage();
   if (!canvas) return;
   try {
@@ -337,6 +390,87 @@ $('copyGraph').onclick = async () => {
   } catch (e) {
     graphMessage(`Could not copy: ${e.message}`);
   }
-};
+}
+$('copyGraph').onclick = copyImage;
+
+// x,y values as tab-separated text (time in local time, value in base units).
+async function copyValues(all) {
+  const points = all ? graph.allPoints() : graph.visiblePoints();
+  if (!points.length) return graphMessage('Nothing to copy yet');
+  try {
+    await navigator.clipboard.writeText(pointsToText(points, graph.unit));
+    graphMessage(`Copied ${points.length} x,y values`);
+  } catch (e) {
+    graphMessage(`Could not copy: ${e.message}`);
+  }
+}
+
+// Right-click menu on the graph. Ctrl/Cmd+C with the graph focused copies the visible values too.
+const menu = $('graphMenu');
+const closeMenu = () => (menu.hidden = true);
+$('graphScroll').addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  menu.hidden = false;
+  const x = Math.min(e.clientX, window.innerWidth - menu.offsetWidth - 8);
+  const y = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 8);
+  menu.style.left = `${Math.max(8, x)}px`;
+  menu.style.top = `${Math.max(8, y)}px`;
+  $('ctxVisible').focus();
+});
+$('ctxVisible').onclick = () => (closeMenu(), copyValues(false));
+$('ctxAll').onclick = () => (closeMenu(), copyValues(true));
+$('ctxImage').onclick = () => (closeMenu(), copyImage());
+document.addEventListener('pointerdown', (e) => menu.contains(e.target) || closeMenu());
+document.addEventListener('keydown', (e) => e.key === 'Escape' && closeMenu());
+window.addEventListener('blur', closeMenu);
+window.addEventListener('resize', closeMenu);
+window.addEventListener('scroll', closeMenu, true);
+$('graphScroll').addEventListener('copy', (e) => {
+  const points = graph.visiblePoints();
+  if (!points.length) return;
+  e.preventDefault();
+  e.clipboardData.setData('text/plain', pointsToText(points, graph.unit));
+  graphMessage(`Copied ${points.length} x,y values`);
+});
 
 $('settingsReload').onclick = () => settings.load();
+
+// Collapsible cards remember whether they were open.
+for (const card of document.querySelectorAll('details.collapsible')) {
+  const key = `fluke287.open.${card.id}`;
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved !== null) card.open = saved === '1';
+  } catch {
+    /* storage blocked: keep the default */
+  }
+  card.addEventListener('toggle', () => {
+    try {
+      localStorage.setItem(key, card.open ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+// Settings tabs (Meter / Owner & save slots / Reset & tools / Viewer).
+const tabs = [...document.querySelectorAll('[role=tab]')];
+function selectTab(tab) {
+  for (const t of tabs) {
+    const on = t === tab;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    $(t.getAttribute('aria-controls')).hidden = !on;
+  }
+}
+tabs.forEach((tab, i) => {
+  tab.addEventListener('click', () => selectTab(tab));
+  tab.addEventListener('keydown', (e) => {
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    const target = tabs[(next + tabs.length) % tabs.length];
+    selectTab(target);
+    target.focus();
+  });
+});

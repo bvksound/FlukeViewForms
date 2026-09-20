@@ -4,7 +4,10 @@ import { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, pa
 import { Meter, MeterError } from '../src/meter.js';
 import { MockTransport } from './mock-meter.js';
 import { ProtocolError, parseAck, parseId, parseQdda, parseQm } from '../src/protocol.js';
-import { clockValueFor, localClockText, meterClockToText, minutesToSeconds, secondsToMinutes } from '../src/settings.js';
+import { measurementsTrend, recordingTrend } from '../src/memory-ui.js';
+import { clockValueFor, localClockText, meterClockToText, meterSecondsToLocalMs, minutesToSeconds, secondsToMinutes } from '../src/settings.js';
+import { toCsv } from '../src/csv.js';
+import { localTimestamp, pointsToText } from '../src/graph-text.js';
 import { LineBuffer, TimeoutError } from '../src/transport.js';
 
 // Examples taken from the Fluke 289/287 Remote Interface Specification.
@@ -183,4 +186,58 @@ test('Meter reads and writes properties, owner fields and save names', async () 
   await meter.setSaveName(2, 'Bench');
   assert.equal(await meter.getSaveName(2), 'Bench');
   await assert.rejects(meter.getSaveName(7), MeterError);
+});
+
+test('toCsv quotes fields and blocks spreadsheet formulas in text from the meter', () => {
+  const csv = toCsv(['name', 'value'], [['plain', 1.5], ['a,b', -0.02], ['=SUM(A1)', 3], ['say "hi"', 4], ['+cmd', null]]);
+  assert.equal(csv, "name,value\r\nplain,1.5\r\n\"a,b\",-0.02\r\n'=SUM(A1),3\r\n\"say \"\"hi\"\"\",4\r\n'+cmd,\r\n");
+});
+
+test('no source file contains raw control characters (they break the inlined page in a browser)', async () => {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const files = (await readdir(new URL('../src/', import.meta.url))).map((f) => `../src/${f}`).concat('../index.html', '../scripts/build.mjs');
+  for (const file of files) {
+    const bytes = await readFile(new URL(file, import.meta.url));
+    const stray = [...bytes].filter((b) => b < 0x20 && b !== 0x0a && b !== 0x0d && b !== 0x09);
+    assert.deepEqual(stray, [], `${file} has raw control bytes`);
+  }
+});
+
+test('meter timestamps become real local times, so charts show the meter\'s clock', () => {
+  // The meter's clock reads 09:05:07 on 2026-09-20; whatever the machine's timezone, so must the chart.
+  const local = new Date(meterSecondsToLocalMs(Date.UTC(2026, 8, 20, 9, 5, 7) / 1000));
+  assert.deepEqual([local.getFullYear(), local.getMonth(), local.getDate(), local.getHours(), local.getMinutes(), local.getSeconds()],
+    [2026, 8, 20, 9, 5, 7]);
+  assert.equal(meterSecondsToLocalMs(Date.UTC(2026, 8, 20, 9, 5, 7) / 1000 + 0.5) % 1000, 500);
+});
+
+test('trend builders: saved measurements as dots, recordings as a line with a min/max band', () => {
+  const r = (id, value, state = 'NORMAL', unit = 'VDC') => ({ id, value, unit, state, time: Date.UTC(2026, 8, 20, 9, 0, 0) / 1000 });
+  const m = (name, ...rs) => ({ item: { name, readings: Object.fromEntries(rs.map((x) => [x.id, x])) } });
+  const dots = measurementsTrend([m('a', r('PRIMARY', 4.9)), m('b', r('PRIMARY', 5.1)), m('c', r('PRIMARY', 0.2, 'NORMAL', 'ADC')), { error: new Error('x') }]);
+  assert.equal(dots.style, 'points');
+  assert.equal(dots.unit, 'V');
+  assert.deepEqual(dots.points.map((p) => p.v), [4.9, 5.1]);
+  assert.match(dots.title, /1 in other units/);
+  assert.equal(measurementsTrend([]), null);
+
+  const sample = (start, lo, avg, hi, state = 'NORMAL') => ({
+    start, count: 1, average: avg, stats: { MINIMUM: r('MINIMUM', lo, state), AVERAGE: r('AVERAGE', avg, state), MAXIMUM: r('MAXIMUM', hi, state) }, primary: { PRIMARY: r('PRIMARY', avg) },
+  });
+  const t0 = Date.UTC(2026, 8, 20, 9, 0, 0) / 1000;
+  const trend = recordingTrend({ name: 'Night' }, [sample(t0, 1, 2, 3), sample(t0 + 5, 1, 2, 3, 'OL')]);
+  assert.equal(trend.style, 'line');
+  assert.deepEqual([trend.points[0].lo, trend.points[0].v, trend.points[0].hi], [1, 2, 3]);
+  assert.ok(Number.isNaN(trend.points[1].v) && Number.isNaN(trend.points[1].hi)); // overload breaks the line
+  assert.equal(trend.points[1].t - trend.points[0].t, 5000);
+  assert.match(trend.title, /Night.*2 samples/);
+});
+
+test('pointsToText: tab-separated x,y values with local time, gaps for overloads, band columns when present', () => {
+  const t = new Date(2026, 8, 20, 14, 5, 0, 250).getTime();
+  assert.equal(localTimestamp(t), '2026-09-20 14:05:00.250');
+  assert.equal(pointsToText([{ t, v: 0.005 }, { t: t + 1000, v: NaN }], 'V'),
+    'time\tvalue_V\n2026-09-20 14:05:00.250\t0.005\n2026-09-20 14:05:01.250\t\n');
+  assert.equal(pointsToText([{ t, v: 2, lo: 1, hi: 3 }], 'A'), 'time\tvalue_A\tmin_A\tmax_A\n2026-09-20 14:05:00.250\t2\t1\t3\n');
+  assert.equal(pointsToText([], ''), 'time\tvalue\n');
 });

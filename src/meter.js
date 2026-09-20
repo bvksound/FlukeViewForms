@@ -41,6 +41,32 @@ export class Meter {
     });
   }
 
+  // Commands answered with a binary block: `0`, then `#0`, the payload, and a closing CR. The payload can hold CR
+  // bytes, so it is read as a block, and re-requested when it arrives incomplete (`isComplete` says so).
+  commandBinary(command, { isComplete = () => true, attempts = 4, settleMs = 120 } = {}) {
+    return this.#enqueue(async () => {
+      let lastError;
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        try {
+          this.#transport.flush();
+          await this.#transport.write(`${command}\r`);
+          const ack = parseAck(await this.#transport.readLine(this.#timeoutMs));
+          if (ack !== 0) throw new MeterError(command, ack);
+          const raw = await this.#transport.readBinary(this.#timeoutMs, settleMs);
+          const framed = raw.length >= 3 && raw[0] === 0x23 && raw[1] === 0x30 && raw[raw.length - 1] === 0x0d;
+          if (!framed) throw new ProtocolError(`${command}: reply is not a binary block`);
+          const payload = raw.subarray(2, raw.length - 1);
+          if (!isComplete(payload)) throw new ProtocolError(`${command}: incomplete reply (${payload.length} bytes)`);
+          return payload;
+        } catch (e) {
+          if (e instanceof MeterError) throw e;
+          lastError = e;
+        }
+      }
+      throw lastError;
+    });
+  }
+
   async identify() {
     return parseId(await this.command('ID'));
   }

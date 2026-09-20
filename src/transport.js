@@ -4,17 +4,22 @@
 
 export class TimeoutError extends Error {}
 
-// Splits an incoming character stream into lines (meter terminates with CR).
+const EOL = (b) => b === 0x0d || b === 0x0a;
+const latin1 = new TextDecoder('latin1'); // the meter is byte-oriented; never treat replies as UTF-8
+
+// Holds the bytes arriving from the meter. Text replies are read as CR-terminated lines; binary replies
+// (which can contain CR bytes themselves) are read as one block. Commands are serialized, so one waiter at a time.
 export class LineBuffer {
-  #partial = '';
-  #lines = [];
+  #buf = new Uint8Array(0);
   #waiter = null;
   #error = null;
 
-  push(text) {
-    const parts = (this.#partial + text).split(/\r\n|\r|\n/);
-    this.#partial = parts.pop();
-    for (const p of parts) if (p) this.#lines.push(p);
+  push(data) {
+    const bytes = typeof data === 'string' ? Uint8Array.from(data, (c) => c.charCodeAt(0) & 0xff) : data;
+    const joined = new Uint8Array(this.#buf.length + bytes.length);
+    joined.set(this.#buf);
+    joined.set(bytes, this.#buf.length);
+    this.#buf = joined;
     this.#waiter?.wake();
   }
 
@@ -24,12 +29,24 @@ export class LineBuffer {
   }
 
   clear() {
-    this.#partial = '';
-    this.#lines = [];
+    this.#buf = new Uint8Array(0);
   }
 
-  readLine(timeoutMs) {
-    if (this.#lines.length) return Promise.resolve(this.#lines.shift());
+  // Next non-empty line, or null when only a partial line is buffered.
+  #takeLine() {
+    for (;;) {
+      const end = this.#buf.findIndex(EOL);
+      if (end < 0) return null;
+      const line = latin1.decode(this.#buf.subarray(0, end));
+      this.#buf = this.#buf.subarray(end + 1);
+      if (line) return line;
+    }
+  }
+
+  // Resolves with test() as soon as it returns something other than null/false; rejects on timeout or link error.
+  #until(test, timeoutMs) {
+    const now = test();
+    if (now != null && now !== false) return Promise.resolve(now);
     if (this.#error) return Promise.reject(this.#error);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -38,15 +55,38 @@ export class LineBuffer {
       }, timeoutMs);
       this.#waiter = {
         wake: () => {
-          // A chunk can arrive without a complete line yet; keep waiting.
-          if (!this.#lines.length && !this.#error) return;
-          clearTimeout(timer);
-          this.#waiter = null;
-          if (this.#lines.length) resolve(this.#lines.shift());
-          else reject(this.#error);
+          // A chunk can arrive without a complete line yet; keep waiting unless the link failed.
+          const value = test();
+          if (value != null && value !== false) {
+            clearTimeout(timer);
+            this.#waiter = null;
+            resolve(value);
+          } else if (this.#error) {
+            clearTimeout(timer);
+            this.#waiter = null;
+            reject(this.#error);
+          }
         },
       };
     });
+  }
+
+  readLine(timeoutMs) {
+    return this.#until(() => this.#takeLine(), timeoutMs);
+  }
+
+  // Everything the meter sends next, as bytes: waits for the first byte, then until the line has been quiet for
+  // `settleMs`. The caller checks the framing and length, and retries if it is incomplete.
+  async readBinary(timeoutMs, settleMs = 120) {
+    await this.#until(() => this.#buf.length > 0, timeoutMs);
+    let seen;
+    do {
+      seen = this.#buf.length;
+      await new Promise((r) => setTimeout(r, settleMs));
+    } while (this.#buf.length !== seen);
+    const out = this.#buf;
+    this.#buf = new Uint8Array(0);
+    return out;
   }
 }
 
@@ -113,12 +153,11 @@ export class WebSerialTransport {
   }
 
   async #pump() {
-    const decoder = new TextDecoder();
     try {
       for (;;) {
         const { value, done } = await this.#reader.read();
         if (done) break;
-        this.#lines.push(decoder.decode(value, { stream: true }));
+        this.#lines.push(value);
       }
     } catch (e) {
       this.#lines.fail(e); // e.g. cable unplugged
@@ -135,6 +174,10 @@ export class WebSerialTransport {
 
   readLine(timeoutMs) {
     return this.#lines.readLine(timeoutMs);
+  }
+
+  readBinary(timeoutMs, settleMs) {
+    return this.#lines.readBinary(timeoutMs, settleMs);
   }
 
   flush() {

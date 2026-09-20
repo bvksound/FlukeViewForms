@@ -1,7 +1,7 @@
 // The "Meter settings" panel: reads every property from the meter, and writes one at a time on Apply.
 import { MeterError } from './meter.js';
 import {
-  ADVANCED, BASIC, OWNER_FIELDS, SAVE_SLOTS,
+  OWNER_FIELDS, PROPERTIES, SAVE_SLOTS,
   localClockText, clockValueFor, meterClockToText, minutesToSeconds, secondsToMinutes,
 } from './settings.js';
 
@@ -11,7 +11,8 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-export function initSettings({ basic, advanced, message, getMeter }) {
+// `containers`: { display, power, measure, owner, slots }, one element per subdivision of the Settings page.
+export function initSettings({ containers, message, getMeter }) {
   const rows = []; // { load(meter), reset() }
 
   const say = (text, bad = false) => {
@@ -120,15 +121,14 @@ export function initSettings({ basic, advanced, message, getMeter }) {
       say(`Clock: ${e.message}`, true);
     }
   };
-  basic.append(el('div', { className: 'set-row' }, el('label', {}, 'Meter clock', el('small', { textContent: 'meter / computer' })),
+  containers.display.append(el('div', { className: 'set-row' }, el('label', {}, 'Meter clock', el('small', { textContent: 'meter / computer' })),
     el('span', { className: 'set-clock' }, meterTime, ' / ', computerTime), syncBtn));
   rows.push({ load: readClock, reset: () => { meterTime.textContent = computerTime.textContent = ''; } });
 
-  BASIC.forEach((spec) => propertyRow(basic, spec));
-  ADVANCED.forEach((spec) => propertyRow(advanced, spec));
+  PROPERTIES.forEach((spec) => propertyRow(containers[spec.group], spec));
 
   for (const [field, label] of OWNER_FIELDS) {
-    addRow(advanced, label, el('input', { type: 'text', id: `set-owner-${field}`, maxLength: 40, spellcheck: false }), {
+    addRow(containers.owner, label, el('input', { type: 'text', id: `set-owner-${field}`, maxLength: 40, spellcheck: false }), {
       read: (m) => m.getOwnerField(field),
       write: (m, value) => m.setOwnerField(field, value.trim()),
       hint: 'owner',
@@ -136,7 +136,7 @@ export function initSettings({ basic, advanced, message, getMeter }) {
   }
 
   for (let i = 0; i < SAVE_SLOTS; i++) {
-    addRow(advanced, `Save slot ${i + 1}`, el('input', { type: 'text', id: `set-save-${i}`, maxLength: 20, spellcheck: false }), {
+    addRow(containers.slots, `Save slot ${i + 1}`, el('input', { type: 'text', id: `set-save-${i}`, maxLength: 20, spellcheck: false }), {
       read: (m) => m.getSaveName(i),
       write: (m, value) => m.setSaveName(i, value.trim()),
       hint: 'name',

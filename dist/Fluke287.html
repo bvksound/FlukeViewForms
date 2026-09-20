@@ -124,7 +124,31 @@
   .stats:empty{display:none;}
   .stats div{border-top:1px solid var(--border);padding-top:9px;font-family:var(--mono);font-size:17px;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums;}
   .stats small{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:400;color:var(--muted2);}
-  .graph-card{margin-top:20px;}
+  /* collapsible cards: the summary is the header row */
+  details.collapsible{margin-top:20px;}
+  details.collapsible:first-child{margin-top:0;}
+  details.collapsible > summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;}
+  details.collapsible > summary::-webkit-details-marker{display:none;}
+  details.collapsible > summary::before{content:"\25B8";color:var(--muted2);font-size:12px;transition:transform .15s;}
+  details.collapsible[open] > summary::before{transform:rotate(90deg);}
+  details.collapsible > summary:hover::before{color:var(--teal);}
+  details.collapsible > summary:focus-visible{outline:2px solid rgba(63,209,199,.4);outline-offset:6px;border-radius:6px;}
+  .grow{flex:1;}
+  .meta .title{text-transform:none;letter-spacing:.04em;font-size:13px;color:var(--teal);}
+  #miniValue,#memoryCounts,#graphCount{text-transform:none;font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:.02em;}
+  #miniValue{color:var(--teal);font-weight:600;}
+  details[open] > summary #miniValue{display:none;}
+  .memory .bad,#memoryMsg.bad{color:var(--red);}
+  #memoryBody{margin-top:8px;}
+  .mem-block{margin-top:18px;padding:0;}
+  .mem-block h4{margin:0 0 8px;font-size:13px;font-family:var(--mono);letter-spacing:.06em;color:var(--muted);font-weight:600;}
+  .mem-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);}
+  .mem-scroll table{border-collapse:collapse;width:100%;font-size:13px;}
+  .mem-scroll th{text-align:left;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  .mem-scroll td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top;}
+  .mem-scroll tr:last-child td{border-bottom:none;}
+  .mem-scroll td:first-child{color:var(--muted2);font-family:var(--mono);}
+  .graph-card{}
   .graph-scroll{
     margin-top:14px;overflow-x:auto;overflow-y:hidden;background:var(--bg);
     border:1px solid var(--border);border-radius:8px;
@@ -160,6 +184,25 @@
   #settingsMsg{font-family:var(--mono);font-size:12px;color:var(--muted);min-height:1.4em;margin-top:12px;}
   #settingsMsg.bad{color:var(--red);}
   @media (max-width:640px){.set-row{grid-template-columns:1fr auto;}.set-row label{grid-column:1/-1;}}
+  .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:16px 0 18px;border-bottom:1px solid var(--border);}
+  .tabs button{background:none;border:none;border-bottom:2px solid transparent;padding:9px 14px;margin-bottom:-1px;font:inherit;font-size:14px;color:var(--muted);cursor:pointer;}
+  .tabs button:hover{color:var(--text);}
+  .tabs button[aria-selected="true"]{color:var(--teal);border-bottom-color:var(--teal);}
+  .tabs button:focus-visible{outline:2px solid rgba(63,209,199,.4);border-radius:6px;}
+  h4.sub{margin:22px 0 4px;font-size:12px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);font-weight:600;}
+  h4.sub:first-child{margin-top:0;}
+  .offline-note{display:block;margin:0;}
+  body.connected .offline-note{display:none;}
+  .meter-only{display:none;}
+  body.connected .meter-only{display:block;}
+  .ctx{position:fixed;z-index:100;min-width:230px;background:#121a21;border:1px solid #2a3641;border-radius:10px;padding:6px;box-shadow:0 18px 44px -12px rgba(0,0,0,.75);}
+  .ctx button{display:block;width:100%;text-align:left;background:none;border:none;border-radius:6px;padding:9px 12px;font:inherit;font-size:14px;color:var(--text);cursor:pointer;}
+  .ctx button:hover,.ctx button:focus-visible{background:rgba(63,209,199,.14);outline:none;}
+  .seg{display:inline-flex;}
+  .seg .btn{border-radius:0;}
+  .seg .btn:first-child{border-radius:8px 0 0 8px;}
+  .seg .btn:last-child{border-radius:0 8px 8px 0;margin-left:-1px;}
+  #settingsState{font-family:var(--mono);font-size:12px;color:var(--muted2);}
   details.advanced{margin-top:20px;}
   details.advanced > summary{cursor:pointer;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);}
   details.advanced[open] > summary{color:var(--teal);margin-bottom:16px;}
@@ -214,36 +257,40 @@
 
   <section class="live" aria-label="Live view">
     <div class="wrap">
-      <div class="card">
-        <div class="meta"><span id="func"></span><span id="modes"></span><span id="battery" class="battery" hidden title="Meter battery level (QBL)"></span></div>
+      <details class="card collapsible" id="liveCard" open>
+        <summary class="meta"><span id="func">Live reading</span><span id="modes"></span><span class="grow"></span><span id="miniValue"></span><span id="battery" class="battery" hidden title="Meter battery level (QBL)"></span></summary>
         <div class="readout stale" id="readout" aria-live="off">
           <span id="value">----</span><span id="unit"></span><span id="coupling"></span>
         </div>
         <div id="secondary"></div>
         <div class="stats" id="stats"></div>
         <div class="controls">
-          <label>Poll every
-            <select id="interval">
-              <option value="250">0.25 s</option><option value="500" selected>0.5 s</option>
-              <option value="1000">1 s</option><option value="5000">5 s</option>
-            </select>
-          </label>
           <button id="record" class="btn btn-ghost btn-sm" disabled>Record</button>
           <button id="export" class="btn btn-ghost btn-sm" disabled>Export CSV</button>
           <span id="count"></span>
         </div>
-      </div>
-      <div class="card graph-card">
-        <div class="meta"><span id="graphTitle">Reading over time</span><span id="graphCount"></span></div>
-        <div class="graph-scroll" id="graphScroll" tabindex="0" aria-label="Live graph, scrolls horizontally">
+      </details>
+
+      <details class="card collapsible graph-card" id="graphCard" open>
+        <summary class="meta"><span id="graphTitle">Reading over time</span><span class="grow"></span><span id="graphCount"></span></summary>
+        <div class="controls" style="margin-top:12px">
+          <span class="seg" role="group" aria-label="Graph source">
+            <button id="viewLive" class="btn btn-ghost btn-sm" aria-pressed="true">Live</button>
+            <button id="viewData" class="btn btn-ghost btn-sm" aria-pressed="false" disabled title="Shows what you last downloaded from the meter's memory">Downloaded</button>
+          </span>
+          <span id="dataHint" class="hint">Read the meter's memory to plot saved measurements and recordings here.</span>
+        </div>
+        <div class="graph-scroll" id="graphScroll" tabindex="0" aria-label="Graph, scrolls horizontally">
           <div class="graph-inner" id="graphInner"><canvas id="graph"></canvas></div>
         </div>
         <div class="controls">
           <label>Zoom
             <select id="zoom">
-              <option value="10">10 px/s</option><option value="20">20 px/s</option>
-              <option value="40" selected>40 px/s</option><option value="80">80 px/s</option>
-              <option value="160">160 px/s</option>
+              <option value="fit">Fit all</option>
+              <option value="0.05">0.05 px/s</option><option value="0.2">0.2 px/s</option>
+              <option value="1">1 px/s</option><option value="5">5 px/s</option>
+              <option value="20">20 px/s</option><option value="40" selected>40 px/s</option>
+              <option value="80">80 px/s</option><option value="160">160 px/s</option>
             </select>
           </label>
           <button id="live" class="btn btn-ghost btn-sm" disabled>Jump to live</button>
@@ -265,50 +312,104 @@
           </span>
           <span class="hint">Drag the graph up or down to pan. Limits accept SI suffixes: 5m, 1.5k.</span>
         </div>
-      </div>
-      <section class="card settings" id="settingsCard" hidden aria-label="Meter settings">
-        <div class="meta"><span style="text-transform:none;letter-spacing:.04em;font-size:13px;color:var(--teal)">Meter settings</span>
-          <button id="settingsReload" class="btn btn-ghost btn-sm">Read again</button></div>
-        <div id="settingsBasic" class="set-grid"></div>
-        <details class="more">
-          <summary>More settings</summary>
-          <p class="hint" style="margin:0 0 8px">Temperature offset, AutoHold threshold, owner fields and save-slot names.</p>
-          <div id="settingsAdvanced" class="set-grid"></div>
-        </details>
-        <div id="settingsMsg" role="status"></div>
-      </section>
-
-      <details class="card advanced" id="advanced">
-        <summary>Advanced</summary>
-        <div class="adv-grid">
-          <div class="adv-item">
-            <strong>Default setup</strong>
-            <p>Resets the Hz trigger edge, pulse width and duty cycle polarity, and the continuity beeper. Does not touch other settings.</p>
-            <button id="advDS" class="btn btn-ghost btn-sm needs-meter" disabled>Default setup</button>
-          </div>
-          <div class="adv-item danger">
-            <strong>Reset meter properties</strong>
-            <p>Same as <em>Reset Setup</em> on the meter's front-panel Setup menu.</p>
-            <button id="advRMP" class="btn btn-ghost btn-sm needs-meter" disabled>Reset properties…</button>
-          </div>
-          <div class="adv-item danger">
-            <strong>Reset instrument</strong>
-            <p>Restores all meter settings to factory defaults (calibration is kept). Same as <em>Reset Meter</em> in Setup.</p>
-            <button id="advRI" class="btn btn-ghost btn-sm needs-meter" disabled>Reset instrument…</button>
-          </div>
-        </div>
-        <div id="advResult" role="status"></div>
-        <div class="raw">
-          <strong style="font-size:14px">Raw command</strong>
-          <p class="hint" style="margin:4px 0 12px">Send any command to the meter and see every reply line. Commands end with a carriage return automatically.
-            Commands the public Fluke spec doesn't document may change meter settings, so use with care.</p>
-          <form id="rawForm">
-            <input id="rawCmd" autocomplete="off" spellcheck="false" placeholder="e.g. ID or QM" aria-label="Raw command">
-            <button id="rawSend" class="btn btn-ghost btn-sm needs-meter" disabled>Send</button>
-          </form>
-          <pre id="rawLog" aria-live="polite" hidden></pre>
-        </div>
       </details>
+
+      <div id="graphMenu" class="ctx" role="menu" aria-label="Graph" hidden>
+        <button role="menuitem" id="ctxVisible">Copy visible x,y values</button>
+        <button role="menuitem" id="ctxAll">Copy all x,y values</button>
+        <button role="menuitem" id="ctxImage">Copy image</button>
+      </div>
+
+      <details class="card collapsible memory" id="memoryCard" open hidden>
+        <summary class="meta"><span class="title">Meter memory</span><span class="grow"></span><span id="memoryCounts"></span></summary>
+        <p class="hint" style="margin:14px 0 12px">Reads what is stored on the meter: saved measurements, min/max and peak sessions, and recordings.
+          Saved measurements and downloaded recordings are plotted in the graph above. Read-only: nothing on the meter is changed or erased.</p>
+        <div class="controls" style="margin-top:0">
+          <button id="memoryRead" class="btn btn-primary btn-sm">Read memory</button>
+          <button id="memoryCsv" class="btn btn-ghost btn-sm" disabled>Download CSV</button>
+          <span id="memoryMsg" class="hint" role="status"></span>
+        </div>
+        <div id="memoryBody"></div>
+      </details>
+
+      <details class="card collapsible settings" id="settingsCard" open>
+        <summary class="meta"><span class="title">Settings</span><span class="grow"></span><span id="settingsState"></span></summary>
+        <div class="tabs" role="tablist" aria-label="Settings sections">
+          <button role="tab" id="tab-meter" aria-controls="panel-meter" aria-selected="true">Meter</button>
+          <button role="tab" id="tab-owner" aria-controls="panel-owner" aria-selected="false" tabindex="-1">Owner &amp; save slots</button>
+          <button role="tab" id="tab-tools" aria-controls="panel-tools" aria-selected="false" tabindex="-1">Reset &amp; tools</button>
+          <button role="tab" id="tab-viewer" aria-controls="panel-viewer" aria-selected="false" tabindex="-1">Viewer</button>
+        </div>
+
+        <div role="tabpanel" id="panel-meter" aria-labelledby="tab-meter">
+          <p class="hint offline-note">Connect a meter to read and change its settings.</p>
+          <div class="meter-only">
+            <div class="controls" style="margin-top:0"><button id="settingsReload" class="btn btn-ghost btn-sm">Read again</button></div>
+            <h4 class="sub">Clock &amp; display</h4><div id="setDisplay" class="set-grid"></div>
+            <h4 class="sub">Power &amp; sound</h4><div id="setPower" class="set-grid"></div>
+            <h4 class="sub">Measurement</h4><div id="setMeasure" class="set-grid"></div>
+          </div>
+        </div>
+
+        <div role="tabpanel" id="panel-owner" aria-labelledby="tab-owner" hidden>
+          <p class="hint offline-note">Connect a meter to read and change its owner details and save-slot names.</p>
+          <div class="meter-only">
+            <h4 class="sub">Owner</h4><div id="setOwner" class="set-grid"></div>
+            <h4 class="sub">Save slots</h4><div id="setSlots" class="set-grid"></div>
+          </div>
+        </div>
+
+        <div role="tabpanel" id="panel-tools" aria-labelledby="tab-tools" hidden>
+          <p class="hint offline-note">Connect a meter to use the reset and raw command tools.</p>
+          <div class="meter-only">
+            <h4 class="sub">Reset</h4>
+            <div class="adv-grid">
+              <div class="adv-item">
+                <strong>Default setup</strong>
+                <p>Resets the Hz trigger edge, pulse width and duty cycle polarity, and the continuity beeper. Does not touch other settings.</p>
+                <button id="advDS" class="btn btn-ghost btn-sm needs-meter" disabled>Default setup</button>
+              </div>
+              <div class="adv-item danger">
+                <strong>Reset meter properties</strong>
+                <p>Same as <em>Reset Setup</em> on the meter's front-panel Setup menu.</p>
+                <button id="advRMP" class="btn btn-ghost btn-sm needs-meter" disabled>Reset properties…</button>
+              </div>
+              <div class="adv-item danger">
+                <strong>Reset instrument</strong>
+                <p>Restores all meter settings to factory defaults (calibration is kept). Same as <em>Reset Meter</em> in Setup.</p>
+                <button id="advRI" class="btn btn-ghost btn-sm needs-meter" disabled>Reset instrument…</button>
+              </div>
+            </div>
+            <div id="advResult" role="status"></div>
+            <h4 class="sub">Raw command</h4>
+            <div class="raw" style="margin-top:0;border-top:none;padding-top:0">
+              <p class="hint" style="margin:0 0 12px">Send any command to the meter and see every reply line. Commands end with a carriage return automatically.
+                Commands the public Fluke spec doesn't document may change meter settings, so use with care.</p>
+              <form id="rawForm">
+                <input id="rawCmd" autocomplete="off" spellcheck="false" placeholder="e.g. ID or QM" aria-label="Raw command">
+                <button id="rawSend" class="btn btn-ghost btn-sm needs-meter" disabled>Send</button>
+              </form>
+              <pre id="rawLog" aria-live="polite" hidden></pre>
+            </div>
+          </div>
+        </div>
+
+        <div role="tabpanel" id="panel-viewer" aria-labelledby="tab-viewer" hidden>
+          <h4 class="sub">Live polling</h4>
+          <div class="set-row">
+            <label for="interval">Poll the meter every<small>live reading and graph</small></label>
+            <select id="interval">
+              <option value="250">0.25 s</option><option value="500" selected>0.5 s</option>
+              <option value="1000">1 s</option><option value="5000">5 s</option>
+            </select>
+            <span></span>
+          </div>
+          <p class="hint">Faster polling gives a smoother graph but keeps the IR link busy. Memory reads pause polling while they run.</p>
+        </div>
+
+        <div id="settingsMsg" role="status"></div>
+      </details>
+
       <p class="foot-note">Needs the Fluke IR-to-USB cable (IR189USB or compatible) and Chrome, Edge or Opera.
         Open source under the MIT license. Not affiliated with Fluke Corporation.</p>
     </div>
@@ -435,7 +536,7 @@ const PAD_T = 14;
 const PAD_B = 24;
 const PAD_R = 16;
 const MAX_POINTS = 36000; // 5 h at 2 samples/s
-const TIME_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
+const TIME_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600, 7200, 21600, 43200, 86400, 172800, 604800];
 const PREFIXES = [[-9, 'n'], [-6, 'µ'], [-3, 'm'], [0, ''], [3, 'k'], [6, 'M']];
 
 function niceStep(rough) {
@@ -452,7 +553,7 @@ function prefixFor(maxAbs) {
 }
 
 // Light palette for exported images, so they read well on paper and in documents.
-const PRINT_COLORS = { line: '#0b7a75', grid: '#e3e7ea', axis: '#5b6670', text: '#3a444c', title: '#10151a', bg: '#ffffff' };
+const PRINT_COLORS = { band: 'rgba(11,122,117,.16)', line: '#0b7a75', grid: '#e3e7ea', axis: '#5b6670', text: '#3a444c', title: '#10151a', bg: '#ffffff' };
 
 const pad2 = (n) => String(n).padStart(2, '0');
 function clock(ms) {
@@ -460,26 +561,44 @@ function clock(ms) {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 }
 
+// Axis label for a tick; long spans (downloaded recordings) need the date as well.
+function stamp(ms, stepSeconds) {
+  const d = new Date(ms);
+  const date = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  if (stepSeconds >= 86400) return date;
+  if (stepSeconds >= 3600) return `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return clock(ms);
+}
+
 class LiveGraph {
   #scroll;
   #inner;
   #canvas;
   #onFollow;
-  #points = []; // { t: ms, v: base-unit value or NaN for an invalid/overload reading }
-  #unit = ''; // caller-supplied symbol for the base unit, e.g. 'V'
-  #pps = 40; // pixels per second
+  // Two datasets share the canvas: the live buffer, and a downloaded one (recording, saved measurements).
+  // A point is { t: ms, v: base-unit value or NaN for an invalid/overload reading, lo?, hi? } (lo/hi = min/max band).
+  #live = [];
+  #liveUnit = ''; // caller-supplied symbol for the base unit, e.g. 'V'
+  #data = null; // { points, unit, style: 'line' | 'points' }
+  #view = 'live';
+  #pps = 40; // pixels per second for the current view
+  #livePps = 40;
+  #fit = false; // downloaded view: keep the whole dataset fitted to the width
   #follow = true;
+  #liveScroll = 0;
+  #onView;
   #colors;
   #manualY = null; // { min, max } in base units, or null for auto-scale
   #shownY = { min: -1, max: 1 }; // range used by the last draw
   #onRange;
 
-  constructor({ scroll, inner, canvas, onFollowChange = () => {}, onRangeChange = () => {} }) {
+  constructor({ scroll, inner, canvas, onFollowChange = () => {}, onRangeChange = () => {}, onViewChange = () => {} }) {
     this.#scroll = scroll;
     this.#inner = inner;
     this.#canvas = canvas;
     this.#onFollow = onFollowChange;
     this.#onRange = onRangeChange;
+    this.#onView = onViewChange;
     this.#enableDragPan();
     this.#readColors();
     scroll.addEventListener('scroll', () => {
@@ -490,7 +609,7 @@ class LiveGraph {
       }
       this.#draw();
     });
-    new ResizeObserver(() => this.#layout()).observe(scroll);
+    new ResizeObserver(() => this.#layout(null, true)).observe(scroll);
     this.#layout();
   }
 
@@ -502,10 +621,92 @@ class LiveGraph {
     return this.#follow;
   }
 
+  get #points() {
+    return this.#view === 'live' ? this.#live : this.#data.points;
+  }
+
+  get #unit() {
+    return this.#view === 'live' ? this.#liveUnit : this.#data.unit;
+  }
+
+  get view() {
+    return this.#view;
+  }
+
+  get hasData() {
+    return this.#data !== null;
+  }
+
+  // Symbol of the base unit of what is shown ('V', 'A', 'Ω'…).
+  get unit() {
+    return this.#unit;
+  }
+
+  allPoints() {
+    return this.#points.map((p) => ({ ...p }));
+  }
+
+  // The points inside the time window currently on screen.
+  visiblePoints() {
+    const pts = this.#points;
+    if (!pts.length) return [];
+    const t0 = pts[0].t;
+    const left = this.#scroll.scrollLeft;
+    const plotW = this.#scroll.clientWidth - AXIS_W - PAD_R;
+    const tMin = t0 + (left / this.#pps) * 1000;
+    const tMax = t0 + ((left + plotW) / this.#pps) * 1000;
+    return pts.filter((p) => p.t >= tMin && p.t <= tMax).map((p) => ({ ...p }));
+  }
+
+  // Shows a downloaded dataset instead of the live trace; the live buffer keeps filling in the background.
+  setData({ points, unit, style = 'line' }) {
+    this.#data = { points: [...points].sort((a, b) => a.t - b.t), unit, style };
+    this.#enterData();
+  }
+
+  // Back to the dataset last shown (after looking at the live trace).
+  showData() {
+    if (this.#data) this.#enterData();
+  }
+
+  #enterData() {
+    if (this.#view === 'live') {
+      this.#livePps = this.#pps;
+      this.#liveScroll = this.#scroll.scrollLeft;
+    }
+    this.#view = 'data';
+    this.#manualY = null;
+    this.#follow = false;
+    this.#onFollow(false);
+    this.#fit = true;
+    this.#scroll.scrollLeft = 0;
+    this.#layout();
+    this.#onView('data');
+  }
+
+  showLive() {
+    if (this.#view === 'live') return;
+    this.#view = 'live';
+    this.#manualY = null;
+    this.#fit = false;
+    this.#pps = this.#livePps;
+    this.#follow = true;
+    this.#onFollow(true);
+    this.#layout();
+    this.#onView('live');
+  }
+
+  clearData() {
+    this.#data = null;
+    this.showLive();
+    this.#onView('live');
+  }
+
   #readColors() {
     const s = getComputedStyle(document.documentElement);
     const get = (n, fallback) => s.getPropertyValue(n).trim() || fallback;
     this.#colors = {
+      band: 'rgba(63, 209, 199, .16)',
       line: get('--trace', '#3fd1c7'),
       grid: get('--border', '#1c242c'),
       axis: get('--muted2', '#5b6670'),
@@ -516,28 +717,30 @@ class LiveGraph {
 
   // `unit` is the base unit's symbol; a different unit than before starts a fresh trace.
   add(t, value, unit) {
-    if (unit !== this.#unit) {
-      this.#points = [];
-      this.#unit = unit;
+    if (unit !== this.#liveUnit) {
+      this.#live = [];
+      this.#liveUnit = unit;
     }
-    this.#points.push({ t, v: value });
-    if (this.#points.length > MAX_POINTS) this.#trim(MAX_POINTS / 10);
-    this.#layout();
+    this.#live.push({ t, v: value });
+    if (this.#live.length > MAX_POINTS) this.#trim(MAX_POINTS / 10);
+    if (this.#view === 'live') this.#layout();
   }
 
   #trim(count) {
-    const oldT0 = this.#points[0].t;
-    this.#points.splice(0, count);
-    if (!this.#follow) {
+    const oldT0 = this.#live[0].t;
+    this.#live.splice(0, count);
+    if (this.#view === 'live' && !this.#follow) {
       // Keep the window the user is looking at in place.
-      const shift = ((this.#points[0].t - oldT0) / 1000) * this.#pps;
+      const shift = ((this.#live[0].t - oldT0) / 1000) * this.#pps;
       this.#scroll.scrollLeft = Math.max(0, this.#scroll.scrollLeft - shift);
     }
   }
 
+  // Clears the live trace; in the downloaded view it drops that dataset and returns to live.
   clear() {
-    this.#points = [];
-    this.#unit = '';
+    if (this.#view === 'data') return this.clearData();
+    this.#live = [];
+    this.#liveUnit = '';
     this.#manualY = null;
     this.#layout();
   }
@@ -591,10 +794,24 @@ class LiveGraph {
     canvas.addEventListener('pointercancel', end);
   }
 
+  // A number of pixels per second, or 'fit' to squeeze the whole dataset into the width.
   setScale(pixelsPerSecond) {
     const anchor = this.#anchorTime();
-    this.#pps = pixelsPerSecond;
+    if (pixelsPerSecond === 'fit') {
+      this.#pps = this.#fitScale();
+      this.#fit = this.#view === 'data';
+    } else {
+      this.#pps = pixelsPerSecond;
+      this.#fit = false;
+    }
     this.#layout(anchor);
+  }
+
+  #fitScale() {
+    const pts = this.#points;
+    const span = pts.length > 1 ? (pts[pts.length - 1].t - pts[0].t) / 1000 : 0;
+    const room = this.#scroll.clientWidth - AXIS_W - PAD_R - 8;
+    return span > 0 && room > 0 ? Math.max(room / span, 1e-4) : this.#pps;
   }
 
   jumpToLive() {
@@ -607,7 +824,12 @@ class LiveGraph {
     return this.#points[0].t + ((this.#scroll.scrollLeft) / this.#pps) * 1000;
   }
 
-  #layout(anchorTime = null) {
+  #layout(anchorTime = null, resized = false) {
+    if (this.#fit && this.#view === 'data') {
+      this.#pps = this.#fitScale();
+      anchorTime = null;
+      if (!resized) this.#scroll.scrollLeft = 0;
+    }
     const pts = this.#points;
     const viewW = this.#scroll.clientWidth;
     const span = pts.length ? ((pts[pts.length - 1].t - pts[0].t) / 1000) * this.#pps : 0;
@@ -666,10 +888,11 @@ class LiveGraph {
 
     let vMin = Infinity, vMax = -Infinity;
     for (let i = lo; i <= hi; i++) {
-      const v = pts[i].v;
-      if (Number.isFinite(v)) {
-        if (v < vMin) vMin = v;
-        if (v > vMax) vMax = v;
+      for (const v of [pts[i].v, pts[i].lo, pts[i].hi]) {
+        if (Number.isFinite(v)) {
+          if (v < vMin) vMin = v;
+          if (v > vMax) vMax = v;
+        }
       }
     }
     if (vMin === Infinity) {
@@ -726,7 +949,7 @@ class LiveGraph {
       g.lineTo(x, plotB);
       g.stroke();
       g.fillStyle = c.axis;
-      g.fillText(clock(s * 1000), x, H - 6);
+      g.fillText(stamp(s * 1000, secPerLabel), x, H - 6);
     }
 
     // Axes
@@ -742,7 +965,31 @@ class LiveGraph {
     g.beginPath();
     g.rect(plotL, plotT - 2, plotR - plotL, plotB - plotT + 4);
     g.clip();
+    const dots = this.#view === 'data' && this.#data.style === 'points';
+
+    // Min/max band behind the line (recording samples carry it).
+    if (!dots && pts.slice(lo, hi + 1).some((p) => Number.isFinite(p.lo) && Number.isFinite(p.hi))) {
+      g.fillStyle = c.band;
+      g.beginPath();
+      const run = [];
+      const flush = () => {
+        if (run.length > 1) {
+          run.forEach((p, i) => (i ? g.lineTo(xAt(p.t), yAt(p.hi)) : g.moveTo(xAt(p.t), yAt(p.hi))));
+          [...run].reverse().forEach((p) => g.lineTo(xAt(p.t), yAt(p.lo)));
+          g.closePath();
+        }
+        run.length = 0;
+      };
+      for (let i = lo; i <= hi; i++) {
+        if (Number.isFinite(pts[i].lo) && Number.isFinite(pts[i].hi)) run.push(pts[i]);
+        else flush();
+      }
+      flush();
+      g.fill();
+    }
+
     g.strokeStyle = c.line;
+    g.fillStyle = c.line;
     g.lineWidth = 2;
     g.lineJoin = 'round';
     g.beginPath();
@@ -754,14 +1001,19 @@ class LiveGraph {
         continue;
       }
       const x = xAt(t), y = yAt(v);
+      if (dots) {
+        g.moveTo(x + 4, y);
+        g.arc(x, y, 4, 0, Math.PI * 2);
+        continue;
+      }
       if (pen) g.lineTo(x, y);
       else g.moveTo(x, y);
       pen = true;
     }
-    g.stroke();
+    if (dots) g.fill();
+    else g.stroke();
     const last = pts[pts.length - 1];
-    if (Number.isFinite(last.v) && hi === pts.length - 1) {
-      g.fillStyle = c.line;
+    if (this.#view === 'live' && Number.isFinite(last.v) && hi === pts.length - 1) {
       g.beginPath();
       g.arc(xAt(last.t), yAt(last.v), 3.5, 0, Math.PI * 2);
       g.fill();
@@ -815,6 +1067,48 @@ class LiveGraph {
 }
 
   return { LiveGraph };
+})();
+
+__modules["graph-text"] = (() => {
+  
+// Plain-text (tab-separated) x,y values of a graph, for the clipboard: pastes into a spreadsheet or a text editor.
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+
+// Local time with milliseconds, e.g. 2026-09-20 14:05:00.250
+function localTimestamp(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+}
+
+// x = time, y = value in base units; band columns (min, max) appear when the data has them (recordings).
+function pointsToText(points, unit = '', { sep = '\t' } = {}) {
+  const band = points.some((p) => Number.isFinite(p.lo) || Number.isFinite(p.hi));
+  const num = (v) => (Number.isFinite(v) ? String(v) : '');
+  const label = unit ? `_${unit}` : '';
+  const header = ['time', `value${label}`, ...(band ? [`min${label}`, `max${label}`] : [])];
+  const rows = points.map((p) => [localTimestamp(p.t), num(p.v), ...(band ? [num(p.lo), num(p.hi)] : [])]);
+  return [header, ...rows].map((r) => r.join(sep)).join('\n') + '\n';
+}
+
+  return { localTimestamp, pointsToText };
+})();
+
+__modules["csv"] = (() => {
+  
+// CSV output. Text from the meter (record names) can start with = + - @, which spreadsheets run as formulas,
+// so such strings get a leading apostrophe. Numbers are written as they are.
+function cell(value) {
+  if (value == null) return '';
+  let text = String(value);
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function toCsv(header, rows) {
+  return [header, ...rows].map((row) => row.map(cell).join(',')).join('\r\n') + '\r\n';
+}
+
+  return { toCsv };
 })();
 
 __modules["protocol"] = (() => {
@@ -909,6 +1203,605 @@ function parseQdda(line) {
   return { ProtocolError, ACK_MESSAGES, parseAck, parseId, parseQm, parseQdda };
 })();
 
+__modules["records"] = (() => {
+  const { ProtocolError } = __modules["protocol"];
+// Decoders for the meter's binary memory records (QSMR, QMMSI, QPSI, QRSI, QSRR, QDDB).
+//
+// Layout follows the open-source dmm_util (N0ury/dmm_util, MIT) and was checked against a real 287's QDDB reply.
+// Everything is little-endian; a double is two little-endian 32-bit words with the HIGH word first. Enumerated
+// fields (function, unit, state…) are numeric ids that the meter translates through `QEMAP <name>` value maps,
+// which the caller supplies as `lookup(mapName, id)`.
+
+const READING_SIZE = 30;
+const latin1 = new TextDecoder('latin1');
+
+const view = (bytes) => new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+const u16 = (bytes, o) => view(bytes).getUint16(o, true);
+const s16 = (bytes, o) => view(bytes).getInt16(o, true);
+
+function f64(bytes, o) {
+  const v = view(bytes);
+  const out = new DataView(new ArrayBuffer(8));
+  out.setUint32(0, v.getUint32(o, true)); // high word first
+  out.setUint32(4, v.getUint32(o + 4, true));
+  return out.getFloat64(0);
+}
+
+// Meter timestamps are seconds since 1970 in the meter's local wall-clock time (see docs/protocol.md).
+const seconds = (bytes, o) => f64(bytes, o);
+
+function need(bytes, length, what) {
+  if (bytes.length < length) throw new ProtocolError(`${what}: expected at least ${length} bytes, got ${bytes.length}`);
+}
+
+// One reading is 30 bytes: id, value(8), unit, multiplier, decimals, digits, state, attribute, time(8).
+function parseReadings(bytes, offset, count, lookup) {
+  const readings = {};
+  for (let i = 0; i < count; i++) {
+    const o = offset + i * READING_SIZE;
+    const id = lookup('readingid', u16(bytes, o));
+    readings[id] = {
+      id,
+      value: f64(bytes, o + 2),
+      unit: lookup('unit', u16(bytes, o + 10)),
+      unitMultiplier: s16(bytes, o + 12),
+      decimals: s16(bytes, o + 14),
+      displayDigits: s16(bytes, o + 16),
+      state: lookup('state', u16(bytes, o + 18)),
+      attribute: lookup('attribute', u16(bytes, o + 20)),
+      time: seconds(bytes, o + 22),
+    };
+  }
+  return readings;
+}
+
+// The record name follows the readings; the meter pads or terminates it, so trim control characters.
+const nameAt = (bytes, offset) => latin1.decode(bytes.subarray(offset)).replace(/[\u0000-\u001f]/g, '').trim();
+
+// Present display: QDDB.
+function parseLive(bytes, lookup) {
+  need(bytes, 34, 'QDDB');
+  const count = u16(bytes, 32);
+  need(bytes, 34 + count * READING_SIZE, 'QDDB');
+  return {
+    primaryFunction: lookup('primfunction', u16(bytes, 0)),
+    secondaryFunction: lookup('secfunction', u16(bytes, 2)),
+    autoRange: lookup('autorange', u16(bytes, 4)),
+    unit: lookup('unit', u16(bytes, 6)),
+    rangeMax: f64(bytes, 8),
+    unitMultiplier: s16(bytes, 16),
+    bolt: lookup('bolt', u16(bytes, 18)),
+    mode: lookup('mode', u16(bytes, 28)),
+    readings: parseReadings(bytes, 34, count, lookup),
+  };
+}
+
+// Saved measurement: QSMR n.
+function parseSavedMeasurement(bytes, lookup) {
+  need(bytes, 38, 'QSMR');
+  const count = u16(bytes, 36);
+  need(bytes, 38 + count * READING_SIZE, 'QSMR');
+  return {
+    kind: 'measurement',
+    seq: u16(bytes, 0),
+    primaryFunction: lookup('primfunction', u16(bytes, 4)),
+    secondaryFunction: lookup('secfunction', u16(bytes, 6)),
+    autoRange: lookup('autorange', u16(bytes, 8)),
+    unit: lookup('unit', u16(bytes, 10)),
+    rangeMax: f64(bytes, 12),
+    unitMultiplier: s16(bytes, 20),
+    bolt: lookup('bolt', u16(bytes, 22)),
+    mode: lookup('mode', u16(bytes, 32)),
+    readings: parseReadings(bytes, 38, count, lookup),
+    name: nameAt(bytes, 38 + count * READING_SIZE),
+  };
+}
+
+// Min/max session (QMMSI n) and peak session (QPSI n) share one layout.
+function parseMinMaxPeak(bytes, lookup, kind) {
+  need(bytes, 54, kind);
+  const count = u16(bytes, 52);
+  need(bytes, 54 + count * READING_SIZE, kind);
+  return {
+    kind,
+    seq: u16(bytes, 0),
+    start: seconds(bytes, 4),
+    end: seconds(bytes, 12),
+    primaryFunction: lookup('primfunction', u16(bytes, 20)),
+    secondaryFunction: lookup('secfunction', u16(bytes, 22)),
+    autoRange: lookup('autorange', u16(bytes, 24)),
+    unit: lookup('unit', u16(bytes, 26)),
+    rangeMax: f64(bytes, 28),
+    unitMultiplier: s16(bytes, 36),
+    bolt: lookup('bolt', u16(bytes, 38)),
+    mode: lookup('mode', u16(bytes, 48)),
+    readings: parseReadings(bytes, 54, count, lookup),
+    name: nameAt(bytes, 54 + count * READING_SIZE),
+  };
+}
+
+// Recording session header: QRSI n. `readingIndex` is what QSRR expects as its first argument.
+function parseRecordingInfo(bytes, lookup) {
+  need(bytes, 78, 'QRSI');
+  const count = u16(bytes, 76);
+  need(bytes, 78 + count * READING_SIZE, 'QRSI');
+  return {
+    kind: 'recording',
+    seq: u16(bytes, 0),
+    start: seconds(bytes, 4),
+    end: seconds(bytes, 12),
+    sampleInterval: f64(bytes, 20),
+    eventThreshold: f64(bytes, 28),
+    readingIndex: u16(bytes, 36),
+    sampleCount: u16(bytes, 40),
+    primaryFunction: lookup('primfunction', u16(bytes, 44)),
+    secondaryFunction: lookup('secfunction', u16(bytes, 46)),
+    autoRange: lookup('autorange', u16(bytes, 48)),
+    unit: lookup('unit', u16(bytes, 50)),
+    rangeMax: f64(bytes, 52),
+    unitMultiplier: s16(bytes, 60),
+    bolt: lookup('bolt', u16(bytes, 62)),
+    mode: lookup('mode', u16(bytes, 72)),
+    readings: parseReadings(bytes, 78, count, lookup),
+    name: nameAt(bytes, 78 + count * READING_SIZE),
+  };
+}
+
+const RECORDING_SAMPLE_SIZE = 146;
+
+// One recording sample: QSRR readingIndex,sampleIndex. Exactly 146 bytes.
+function parseRecordingSample(bytes, lookup) {
+  if (bytes.length !== RECORDING_SAMPLE_SIZE) {
+    throw new ProtocolError(`QSRR: expected ${RECORDING_SAMPLE_SIZE} bytes, got ${bytes.length}`);
+  }
+  const stats = parseReadings(bytes, 16, 3, lookup); // MAXIMUM / AVERAGE / MINIMUM over the interval
+  // The stored AVERAGE is the SUM of the interval's readings; dmm_util divides it by the reading count (u16 @106).
+  // Confirmed on a real 287: sums exceeded the interval's own maximum until divided.
+  const count = u16(bytes, 106);
+  return {
+    start: seconds(bytes, 0),
+    end: seconds(bytes, 8),
+    stats,
+    count,
+    average: count > 0 && stats.AVERAGE ? stats.AVERAGE.value / count : NaN,
+    primary: parseReadings(bytes, 110, 1, lookup), // the value at the moment of the sample
+    recordType: lookup('recordtype', u16(bytes, 140)),
+    stable: lookup('isstableflag', u16(bytes, 142)),
+    transient: lookup('transientstate', u16(bytes, 144)),
+  };
+}
+
+// "3,0,NONE,1,HERTZ,2,X" -> Map { '0' => 'NONE', … }. The first field is the pair count.
+function parseMap(line) {
+  const fields = line.split(',').map((f) => f.trim());
+  const count = Number(fields.shift());
+  if (!Number.isInteger(count) || fields.length !== count * 2) {
+    throw new ProtocolError(`Unexpected value map: ${JSON.stringify(line)}`);
+  }
+  const map = new Map();
+  for (let i = 0; i < fields.length; i += 2) map.set(fields[i], fields[i + 1]);
+  return map;
+}
+
+  return { u16, s16, f64, seconds, parseReadings, parseLive, parseSavedMeasurement, parseMinMaxPeak, parseRecordingInfo, RECORDING_SAMPLE_SIZE, parseRecordingSample, parseMap };
+})();
+
+__modules["memory"] = (() => {
+  const { ProtocolError } = __modules["protocol"];
+  const { RECORDING_SAMPLE_SIZE, parseMap, parseMinMaxPeak, parseRecordingInfo, parseRecordingSample, parseSavedMeasurement, u16 } = __modules["records"];
+// Reads what the meter has stored: saved measurements, min/max and peak sessions, and recordings.
+// Read-only. Nothing here can erase or change the meter's memory.
+
+// Value maps the record decoders need; fetched once per connection with QEMAP.
+const MAP_NAMES = [
+  'readingid', 'unit', 'state', 'attribute', 'primfunction', 'secfunction', 'autorange', 'bolt', 'mode',
+  'recordtype', 'isstableflag', 'transientstate',
+];
+
+const bytesFor = (head, perReading, count) => head + perReading * count;
+
+class MemoryReader {
+  #meter;
+  #maps = new Map();
+
+  constructor(meter) {
+    this.#meter = meter;
+  }
+
+  // Unknown ids show as "#7" rather than failing a whole download over one new value.
+  lookup = (mapName, id) => this.#maps.get(mapName)?.get(String(id)) ?? `#${id}`;
+
+  async loadMaps() {
+    for (const name of MAP_NAMES) {
+      if (!this.#maps.has(name)) this.#maps.set(name, parseMap((await this.#meter.command(`QEMAP ${name}`)).trim()));
+    }
+  }
+
+  // QSLS -> how many of each kind are stored.
+  async summary() {
+    const fields = (await this.#meter.command('QSLS')).trim().split(',').map(Number);
+    if (fields.length !== 4 || fields.some((n) => !Number.isInteger(n) || n < 0)) {
+      throw new ProtocolError('Unexpected QSLS reply');
+    }
+    const [recordings, minMax, peak, measurements] = fields;
+    return { recordings, minMax, peak, measurements };
+  }
+
+  // Each of these takes a 0-based index.
+  async savedMeasurement(index) {
+    await this.loadMaps();
+    const payload = await this.#meter.commandBinary(`QSMR ${index}`, {
+      isComplete: (b) => b.length >= 38 && b.length >= bytesFor(38, 30, u16(b, 36)),
+    });
+    return parseSavedMeasurement(payload, this.lookup);
+  }
+
+  async minMax(index) {
+    return this.#session('QMMSI', index, 'minmax');
+  }
+
+  async peak(index) {
+    return this.#session('QPSI', index, 'peak');
+  }
+
+  async #session(command, index, kind) {
+    await this.loadMaps();
+    const payload = await this.#meter.commandBinary(`${command} ${index}`, {
+      isComplete: (b) => b.length >= 54 && b.length >= bytesFor(54, 30, u16(b, 52)),
+    });
+    return parseMinMaxPeak(payload, this.lookup, kind);
+  }
+
+  async recording(index) {
+    await this.loadMaps();
+    const payload = await this.#meter.commandBinary(`QRSI ${index}`, {
+      isComplete: (b) => b.length >= 78 && b.length >= bytesFor(78, 30, u16(b, 76)),
+    });
+    return parseRecordingInfo(payload, this.lookup);
+  }
+
+  // All samples of a recording, one QSRR each. Long recordings take a while over the IR link, so this reports
+  // progress and stops cleanly when `signal` is aborted, returning what it has.
+  async recordingSamples(info, { onProgress = () => {}, signal } = {}) {
+    await this.loadMaps();
+    const samples = [];
+    for (let i = 0; i < info.sampleCount; i++) {
+      if (signal?.aborted) break;
+      const payload = await this.#meter.commandBinary(`QSRR ${info.readingIndex},${i}`, {
+        isComplete: (b) => b.length === RECORDING_SAMPLE_SIZE,
+      });
+      samples.push(parseRecordingSample(payload, this.lookup));
+      onProgress(i + 1, info.sampleCount);
+    }
+    return samples;
+  }
+}
+
+  return { MAP_NAMES, MemoryReader };
+})();
+
+__modules["settings"] = (() => {
+  
+// Meter settings reachable through QMP / MP (undocumented; see docs/protocol.md).
+// `kind`: choice (a fixed list), minutes (the meter stores seconds), number (plain text), text (read-only here).
+// Only values confirmed on a real 287 are listed for choices the meter accepts; anything else it rejects with an error.
+
+// Grouped for the Settings page: display (with the clock), power and sound, measurement.
+const PROPERTIES = [
+  { group: 'display', key: 'digits', label: 'Display digits', kind: 'choice', options: [['4', '4 digits'], ['5', '5 digits']] },
+  { group: 'display', key: 'numFmt', label: 'Number format', kind: 'choice', options: [['POINT', '1.23 (point)'], ['COMMA', '1,23 (comma)']] },
+  { group: 'display', key: 'dateFmt', label: 'Date format', kind: 'choice', options: [['DD_MM', 'Day / month'], ['MM_DD', 'Month / day']] },
+  { group: 'display', key: 'timeFmt', label: 'Time format', kind: 'choice', options: [['24', '24 hour'], ['12', '12 hour']] },
+  { group: 'display', key: 'lang', label: 'Language', kind: 'choice', options: [
+    ['ENGLISH', 'English'], ['GERMAN', 'German'], ['FRENCH', 'French'], ['ITALIAN', 'Italian'],
+    ['SPANISH', 'Spanish'], ['JAPANESE', 'Japanese'], ['CHINESE', 'Chinese'],
+  ] },
+  { group: 'power', key: 'beeper', label: 'Beeper', kind: 'choice', options: [['ON', 'On'], ['OFF', 'Off']] },
+  { group: 'power', key: 'ablto', label: 'Backlight timeout', kind: 'minutes' },
+  { group: 'power', key: 'apoffto', label: 'Auto power-off', kind: 'minutes' },
+  { group: 'measure', key: 'acsmooth', label: 'AC smoothing', kind: 'choice', options: [['OFF', 'Off'], ['ON', 'On']] },
+  { group: 'measure', key: 'dBmRef', label: 'dBm reference', kind: 'choice', options: [
+    ...['4', '8', '16', '25', '32', '50', '75', '600', '1000'].map((v) => [v, `${v} Ω`]), ['CUSTOM', 'Custom'],
+  ] },
+  { group: 'measure', key: 'cusDBm', label: 'Custom dBm reference', kind: 'number' },
+  { group: 'measure', key: 'recEventTh', label: 'Recording event threshold', kind: 'number' },
+  { group: 'measure', key: 'tempOS', label: 'Temperature offset', kind: 'number' },
+  { group: 'measure', key: 'aheventTh', label: 'AutoHold event threshold', kind: 'number' },
+];
+
+const OWNER_FIELDS = [
+  ['company', 'Company'],
+  ['site', 'Site'],
+  ['operator', 'Operator'],
+  ['contact', 'Contact'],
+];
+
+const SAVE_SLOTS = 8;
+
+const secondsToMinutes = (seconds) => Number(seconds) / 60;
+const minutesToSeconds = (minutes) => Math.round(Number(minutes) * 60);
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// The meter keeps *local wall-clock time* encoded as if it were UTC, so "12:00 here" is 12:00 UTC to the meter.
+function clockValueFor(date = new Date()) {
+  return Math.round(date.getTime() / 1000) - date.getTimezoneOffset() * 60;
+}
+
+// A meter timestamp (local wall-clock time encoded as UTC) as a real epoch in ms, so a chart shows the same
+// clock time the meter did, DST included.
+function meterSecondsToLocalMs(seconds) {
+  const d = new Date(Number(seconds) * 1000);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()).getTime() +
+    Math.round((Number(seconds) % 1) * 1000);
+}
+
+function meterClockToText(seconds) {
+  const d = new Date(Number(seconds) * 1000);
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ` +
+    `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`;
+}
+
+function localClockText(date = new Date()) {
+  return meterClockToText(clockValueFor(date));
+}
+
+  return { PROPERTIES, OWNER_FIELDS, SAVE_SLOTS, secondsToMinutes, minutesToSeconds, clockValueFor, meterSecondsToLocalMs, meterClockToText, localClockText };
+})();
+
+__modules["memory-ui"] = (() => {
+  const { toCsv } = __modules["csv"];
+  const { formatReading, prettyFunction, unitSymbol } = __modules["format"];
+  const { MemoryReader } = __modules["memory"];
+  const { meterClockToText, meterSecondsToLocalMs } = __modules["settings"];
+// The "Meter memory" panel: reads stored measurements, min/max and peak sessions and recordings from the meter.
+
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+const when = (seconds) => meterClockToText(seconds);
+const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
+const safe = (name) => name.replace(/[^\w.-]+/g, '_').slice(0, 40) || 'recording';
+
+// A stored reading as the meter would have displayed it.
+function show(r) {
+  if (!r) return '';
+  const f = formatReading({ value: r.value, baseUnit: r.unit, unitMultiplier: r.unitMultiplier, decimalPlaces: r.decimals, state: r.state });
+  return `${f.text} ${f.unit}${f.coupling ? ` ${f.coupling}` : ''}`.trim();
+}
+
+function download(filename, text) {
+  const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/csv' })), download: filename });
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+const usable = (r) => (r.state === 'NORMAL' ? r.value : NaN);
+
+// Saved measurements as dots over time (all in the unit most of them share).
+function measurementsTrend(entries) {
+  const items = entries.filter((e) => e.item).map((e) => {
+    const r = e.item.readings.PRIMARY ?? Object.values(e.item.readings)[0];
+    return r && { t: meterSecondsToLocalMs(r.time), v: usable(r), unit: r.unit };
+  }).filter(Boolean);
+  if (!items.length) return null;
+  const counts = new Map();
+  items.forEach((i) => counts.set(i.unit, (counts.get(i.unit) ?? 0) + 1));
+  const [unit] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  const points = items.filter((i) => i.unit === unit).map(({ t, v }) => ({ t, v }));
+  const skipped = items.length - points.length;
+  return {
+    title: `Saved measurements: ${points.length}${skipped ? ` (${skipped} in other units not shown)` : ''}`,
+    unit: unitSymbol(unit),
+    style: 'points',
+    points,
+  };
+}
+
+// A recording as its average over time, with the min/max of each interval as a band.
+function recordingTrend(info, samples) {
+  const unit = samples[0].stats.AVERAGE?.unit ?? samples[0].primary.PRIMARY?.unit ?? '';
+  const points = samples.map((s) => {
+    const ok = s.stats.AVERAGE?.state === 'NORMAL' && Number.isFinite(s.average);
+    return {
+      t: meterSecondsToLocalMs(s.start),
+      v: ok ? s.average : NaN,
+      lo: s.stats.MINIMUM ? usable(s.stats.MINIMUM) : NaN,
+      hi: s.stats.MAXIMUM ? usable(s.stats.MAXIMUM) : NaN,
+    };
+  });
+  return { title: `Recording "${info.name}": ${samples.length} samples`, unit: unitSymbol(unit), style: 'line', points };
+}
+
+function initMemory({ counts, message, body, readButton, csvButton, getMeter, setBusy, showTrend = () => {} }) {
+  let reader = null;
+  let readerMeter = null;
+  let data = null;
+  let abort = null;
+
+  const say = (text, bad = false) => {
+    message.textContent = text;
+    message.classList.toggle('bad', bad);
+  };
+
+  function readerFor(meter) {
+    if (readerMeter !== meter) {
+      reader = new MemoryReader(meter);
+      readerMeter = meter;
+    }
+    return reader;
+  }
+
+  const summaryText = (s) =>
+    `${s.measurements} saved · ${s.minMax} min/max · ${s.peak} peak · ${s.recordings} recording${s.recordings === 1 ? '' : 's'}`;
+
+  function table(title, columns, rows) {
+    const head = el('tr', {}, ...columns.map((c) => el('th', { textContent: c })));
+    const bodyRows = rows.map((cells) => el('tr', {}, ...cells.map((c) => el('td', {}, c))));
+    return el('section', { className: 'mem-block' }, el('h4', { textContent: title }),
+      el('div', { className: 'mem-scroll' }, el('table', {}, el('thead', {}, head), el('tbody', {}, ...bodyRows))));
+  }
+
+  function render() {
+    body.replaceChildren();
+    if (!data) return;
+    const { summary, measurements, minMax, peak, recordings } = data;
+    if (!summary.measurements && !summary.minMax && !summary.peak && !summary.recordings) {
+      body.append(el('p', { className: 'hint', textContent: 'Nothing is stored on the meter. Press Save on the meter (or record a session there), then read again.' }));
+      return;
+    }
+    const failed = (e) => [el('span', { className: 'bad', textContent: `could not read: ${e.message}` })];
+
+    if (measurements.length) {
+      body.append(table('Saved measurements', ['#', 'Name', 'Time', 'Function', 'Reading'],
+        measurements.map(({ index, item, error }) => (error ? [`${index + 1}`, ...failed(error)]
+          : [`${index + 1}`, item.name, when((item.readings.PRIMARY ?? Object.values(item.readings)[0])?.time ?? 0),
+            prettyFunction(item.primaryFunction), show(item.readings.PRIMARY ?? Object.values(item.readings)[0])]))));
+    }
+    for (const [title, list] of [['Min / max sessions', minMax], ['Peak sessions', peak]]) {
+      if (!list.length) continue;
+      body.append(table(title, ['#', 'Name', 'Start', 'End', 'Function', 'Readings'],
+        list.map(({ index, item, error }) => (error ? [`${index + 1}`, ...failed(error)]
+          : [`${index + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction),
+            Object.values(item.readings).map((r) => `${r.id.toLowerCase()} ${show(r)}`).join(' · ')]))));
+    }
+    if (recordings.length) {
+      body.append(table('Recordings', ['#', 'Name', 'Start', 'End', 'Interval', 'Samples', ''],
+        recordings.map(({ index, item, error }) => {
+          if (error) return [`${index + 1}`, ...failed(error)];
+          const button = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'Download samples' });
+          button.onclick = () => downloadRecording(item, button);
+          return [`${index + 1}`, item.name, when(item.start), when(item.end), `${item.sampleInterval} s`, `${item.sampleCount}`, button];
+        })));
+    }
+  }
+
+  async function downloadRecording(info, button) {
+    const meter = getMeter();
+    if (!meter) return;
+    if (abort) {
+      abort.abort();
+      return;
+    }
+    abort = new AbortController();
+    button.textContent = 'Cancel';
+    setBusy(true);
+    try {
+      const samples = await readerFor(meter).recordingSamples(info, {
+        signal: abort.signal,
+        onProgress: (done, total) => say(`Reading "${info.name}": sample ${done} of ${total}…`),
+      });
+      const cancelled = abort.signal.aborted;
+      const rows = samples.map((s, i) => [i + 1, when(s.start), when(s.end), s.count, s.recordType, s.stable,
+        s.primary.PRIMARY?.value, s.stats.MAXIMUM?.value, s.average, s.stats.MINIMUM?.value, s.primary.PRIMARY?.unit]);
+      if (samples.length) showTrend(recordingTrend(info, samples));
+      if (rows.length) {
+        download(`fluke287-${safe(info.name)}-${stamp()}.csv`,
+          toCsv(['sample', 'start', 'end', 'readings', 'type', 'stable', 'primary', 'maximum', 'average', 'minimum', 'unit'], rows));
+      }
+      say(`${cancelled ? 'Cancelled after' : 'Saved'} ${rows.length} of ${info.sampleCount} samples`);
+    } catch (e) {
+      say(`Recording download failed: ${e.message}`, true);
+    } finally {
+      abort = null;
+      button.textContent = 'Download samples';
+      setBusy(false);
+    }
+  }
+
+  // Reading the counts is one quick command, so it runs on connect.
+  async function loadSummary() {
+    const meter = getMeter();
+    if (!meter) return;
+    try {
+      counts.textContent = summaryText(await readerFor(meter).summary());
+    } catch {
+      counts.textContent = 'memory not available';
+    }
+  }
+
+  async function readAll() {
+    const meter = getMeter();
+    if (!meter) return;
+    const r = readerFor(meter);
+    readButton.disabled = true;
+    setBusy(true);
+    try {
+      say('Reading memory…');
+      const summary = await r.summary();
+      counts.textContent = summaryText(summary);
+      const result = { summary, measurements: [], minMax: [], peak: [], recordings: [] };
+      const kinds = [
+        ['measurements', 'saved measurements', summary.measurements, (i) => r.savedMeasurement(i)],
+        ['minMax', 'min/max sessions', summary.minMax, (i) => r.minMax(i)],
+        ['peak', 'peak sessions', summary.peak, (i) => r.peak(i)],
+        ['recordings', 'recordings', summary.recordings, (i) => r.recording(i)],
+      ];
+      for (const [key, label, count, read] of kinds) {
+        for (let i = 0; i < count; i++) {
+          say(`Reading ${label}: ${i + 1} of ${count}…`);
+          try {
+            result[key].push({ index: i, item: await read(i) });
+          } catch (e) {
+            result[key].push({ index: i, error: e });
+          }
+        }
+      }
+      data = result;
+      render();
+      const trend = measurementsTrend(result.measurements);
+      if (trend) showTrend(trend);
+      csvButton.disabled = !(result.measurements.length || result.minMax.length || result.peak.length);
+      say(`Done: ${summaryText(summary)}`);
+    } catch (e) {
+      say(`Could not read memory: ${e.message}`, true);
+    } finally {
+      readButton.disabled = false;
+      setBusy(false);
+    }
+  }
+
+  // One row per stored reading, for the items that hold values directly (recordings have their own download).
+  function exportCsv() {
+    if (!data) return;
+    const rows = [];
+    const add = (kind, { index, item }) => {
+      if (!item) return;
+      for (const r of Object.values(item.readings)) {
+        rows.push([kind, index + 1, item.name, when(item.start ?? r.time), item.end ? when(item.end) : '',
+          item.primaryFunction, r.id, r.value, r.unit, r.state]);
+      }
+    };
+    data.measurements.forEach((m) => add('measurement', m));
+    data.minMax.forEach((m) => add('minmax', m));
+    data.peak.forEach((m) => add('peak', m));
+    download(`fluke287-memory-${stamp()}.csv`,
+      toCsv(['kind', 'index', 'name', 'start', 'end', 'function', 'reading', 'value_base_units', 'unit', 'state'], rows));
+  }
+
+  readButton.onclick = readAll;
+  csvButton.onclick = exportCsv;
+
+  return {
+    loadSummary,
+    reset() {
+      data = null;
+      reader = readerMeter = null;
+      body.replaceChildren();
+      counts.textContent = '';
+      csvButton.disabled = true;
+      say('');
+    },
+  };
+}
+
+  return { measurementsTrend, recordingTrend, initMemory };
+})();
+
 __modules["transport"] = (() => {
   
 // Transports move text between the app and a meter. All expose the same small interface:
@@ -917,17 +1810,22 @@ __modules["transport"] = (() => {
 
 class TimeoutError extends Error {}
 
-// Splits an incoming character stream into lines (meter terminates with CR).
+const EOL = (b) => b === 0x0d || b === 0x0a;
+const latin1 = new TextDecoder('latin1'); // the meter is byte-oriented; never treat replies as UTF-8
+
+// Holds the bytes arriving from the meter. Text replies are read as CR-terminated lines; binary replies
+// (which can contain CR bytes themselves) are read as one block. Commands are serialized, so one waiter at a time.
 class LineBuffer {
-  #partial = '';
-  #lines = [];
+  #buf = new Uint8Array(0);
   #waiter = null;
   #error = null;
 
-  push(text) {
-    const parts = (this.#partial + text).split(/\r\n|\r|\n/);
-    this.#partial = parts.pop();
-    for (const p of parts) if (p) this.#lines.push(p);
+  push(data) {
+    const bytes = typeof data === 'string' ? Uint8Array.from(data, (c) => c.charCodeAt(0) & 0xff) : data;
+    const joined = new Uint8Array(this.#buf.length + bytes.length);
+    joined.set(this.#buf);
+    joined.set(bytes, this.#buf.length);
+    this.#buf = joined;
     this.#waiter?.wake();
   }
 
@@ -937,12 +1835,24 @@ class LineBuffer {
   }
 
   clear() {
-    this.#partial = '';
-    this.#lines = [];
+    this.#buf = new Uint8Array(0);
   }
 
-  readLine(timeoutMs) {
-    if (this.#lines.length) return Promise.resolve(this.#lines.shift());
+  // Next non-empty line, or null when only a partial line is buffered.
+  #takeLine() {
+    for (;;) {
+      const end = this.#buf.findIndex(EOL);
+      if (end < 0) return null;
+      const line = latin1.decode(this.#buf.subarray(0, end));
+      this.#buf = this.#buf.subarray(end + 1);
+      if (line) return line;
+    }
+  }
+
+  // Resolves with test() as soon as it returns something other than null/false; rejects on timeout or link error.
+  #until(test, timeoutMs) {
+    const now = test();
+    if (now != null && now !== false) return Promise.resolve(now);
     if (this.#error) return Promise.reject(this.#error);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -951,15 +1861,38 @@ class LineBuffer {
       }, timeoutMs);
       this.#waiter = {
         wake: () => {
-          // A chunk can arrive without a complete line yet; keep waiting.
-          if (!this.#lines.length && !this.#error) return;
-          clearTimeout(timer);
-          this.#waiter = null;
-          if (this.#lines.length) resolve(this.#lines.shift());
-          else reject(this.#error);
+          // A chunk can arrive without a complete line yet; keep waiting unless the link failed.
+          const value = test();
+          if (value != null && value !== false) {
+            clearTimeout(timer);
+            this.#waiter = null;
+            resolve(value);
+          } else if (this.#error) {
+            clearTimeout(timer);
+            this.#waiter = null;
+            reject(this.#error);
+          }
         },
       };
     });
+  }
+
+  readLine(timeoutMs) {
+    return this.#until(() => this.#takeLine(), timeoutMs);
+  }
+
+  // Everything the meter sends next, as bytes: waits for the first byte, then until the line has been quiet for
+  // `settleMs`. The caller checks the framing and length, and retries if it is incomplete.
+  async readBinary(timeoutMs, settleMs = 120) {
+    await this.#until(() => this.#buf.length > 0, timeoutMs);
+    let seen;
+    do {
+      seen = this.#buf.length;
+      await new Promise((r) => setTimeout(r, settleMs));
+    } while (this.#buf.length !== seen);
+    const out = this.#buf;
+    this.#buf = new Uint8Array(0);
+    return out;
   }
 }
 
@@ -1026,12 +1959,11 @@ class WebSerialTransport {
   }
 
   async #pump() {
-    const decoder = new TextDecoder();
     try {
       for (;;) {
         const { value, done } = await this.#reader.read();
         if (done) break;
-        this.#lines.push(decoder.decode(value, { stream: true }));
+        this.#lines.push(value);
       }
     } catch (e) {
       this.#lines.fail(e); // e.g. cable unplugged
@@ -1048,6 +1980,10 @@ class WebSerialTransport {
 
   readLine(timeoutMs) {
     return this.#lines.readLine(timeoutMs);
+  }
+
+  readBinary(timeoutMs, settleMs) {
+    return this.#lines.readBinary(timeoutMs, settleMs);
   }
 
   flush() {
@@ -1110,6 +2046,32 @@ class Meter {
         if (e instanceof TimeoutError || e instanceof ProtocolError) this.#transport.flush();
         throw e;
       }
+    });
+  }
+
+  // Commands answered with a binary block: `0`, then `#0`, the payload, and a closing CR. The payload can hold CR
+  // bytes, so it is read as a block, and re-requested when it arrives incomplete (`isComplete` says so).
+  commandBinary(command, { isComplete = () => true, attempts = 4, settleMs = 120 } = {}) {
+    return this.#enqueue(async () => {
+      let lastError;
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        try {
+          this.#transport.flush();
+          await this.#transport.write(`${command}\r`);
+          const ack = parseAck(await this.#transport.readLine(this.#timeoutMs));
+          if (ack !== 0) throw new MeterError(command, ack);
+          const raw = await this.#transport.readBinary(this.#timeoutMs, settleMs);
+          const framed = raw.length >= 3 && raw[0] === 0x23 && raw[1] === 0x30 && raw[raw.length - 1] === 0x0d;
+          if (!framed) throw new ProtocolError(`${command}: reply is not a binary block`);
+          const payload = raw.subarray(2, raw.length - 1);
+          if (!isComplete(payload)) throw new ProtocolError(`${command}: incomplete reply (${payload.length} bytes)`);
+          return payload;
+        } catch (e) {
+          if (e instanceof MeterError) throw e;
+          lastError = e;
+        }
+      }
+      throw lastError;
     });
   }
 
@@ -1197,63 +2159,9 @@ class Meter {
   return { MeterError, Meter };
 })();
 
-__modules["settings"] = (() => {
-  
-// Meter settings reachable through QMP / MP (undocumented; see docs/protocol.md).
-// `kind`: choice (a fixed list), minutes (the meter stores seconds), number (plain text), text (read-only here).
-// Only values confirmed on a real 287 are listed for choices the meter accepts; anything else it rejects with an error.
-
-const BASIC = [
-  { key: 'beeper', label: 'Beeper', kind: 'choice', options: [['ON', 'On'], ['OFF', 'Off']] },
-  { key: 'digits', label: 'Display digits', kind: 'choice', options: [['4', '4 digits'], ['5', '5 digits']] },
-  { key: 'ablto', label: 'Backlight timeout', kind: 'minutes' },
-  { key: 'apoffto', label: 'Auto power-off', kind: 'minutes' },
-  { key: 'dateFmt', label: 'Date format', kind: 'choice', options: [['DD_MM', 'Day / month'], ['MM_DD', 'Month / day']] },
-  { key: 'timeFmt', label: 'Time format', kind: 'choice', options: [['24', '24 hour'], ['12', '12 hour']] },
-  { key: 'numFmt', label: 'Number format', kind: 'choice', options: [['POINT', '1.23 (point)'], ['COMMA', '1,23 (comma)']] },
-];
-
-const ADVANCED = [
-  { key: 'tempOS', label: 'Temperature offset', kind: 'number' },
-  { key: 'aheventTh', label: 'AutoHold event threshold', kind: 'number' },
-  { key: 'lang', label: 'Language', kind: 'text', readOnly: true },
-];
-
-const OWNER_FIELDS = [
-  ['company', 'Company'],
-  ['site', 'Site'],
-  ['operator', 'Operator'],
-  ['contact', 'Contact'],
-];
-
-const SAVE_SLOTS = 8;
-
-const secondsToMinutes = (seconds) => Number(seconds) / 60;
-const minutesToSeconds = (minutes) => Math.round(Number(minutes) * 60);
-
-const pad2 = (n) => String(n).padStart(2, '0');
-
-// The meter keeps *local wall-clock time* encoded as if it were UTC, so "12:00 here" is 12:00 UTC to the meter.
-function clockValueFor(date = new Date()) {
-  return Math.round(date.getTime() / 1000) - date.getTimezoneOffset() * 60;
-}
-
-function meterClockToText(seconds) {
-  const d = new Date(Number(seconds) * 1000);
-  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ` +
-    `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`;
-}
-
-function localClockText(date = new Date()) {
-  return meterClockToText(clockValueFor(date));
-}
-
-  return { BASIC, ADVANCED, OWNER_FIELDS, SAVE_SLOTS, secondsToMinutes, minutesToSeconds, clockValueFor, meterClockToText, localClockText };
-})();
-
 __modules["settings-ui"] = (() => {
   const { MeterError } = __modules["meter"];
-  const { ADVANCED, BASIC, OWNER_FIELDS, SAVE_SLOTS, localClockText, clockValueFor, meterClockToText, minutesToSeconds, secondsToMinutes } = __modules["settings"];
+  const { OWNER_FIELDS, PROPERTIES, SAVE_SLOTS, localClockText, clockValueFor, meterClockToText, minutesToSeconds, secondsToMinutes } = __modules["settings"];
 // The "Meter settings" panel: reads every property from the meter, and writes one at a time on Apply.
 
 function el(tag, props = {}, ...children) {
@@ -1262,7 +2170,8 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-function initSettings({ basic, advanced, message, getMeter }) {
+// `containers`: { display, power, measure, owner, slots }, one element per subdivision of the Settings page.
+function initSettings({ containers, message, getMeter }) {
   const rows = []; // { load(meter), reset() }
 
   const say = (text, bad = false) => {
@@ -1371,15 +2280,14 @@ function initSettings({ basic, advanced, message, getMeter }) {
       say(`Clock: ${e.message}`, true);
     }
   };
-  basic.append(el('div', { className: 'set-row' }, el('label', {}, 'Meter clock', el('small', { textContent: 'meter / computer' })),
+  containers.display.append(el('div', { className: 'set-row' }, el('label', {}, 'Meter clock', el('small', { textContent: 'meter / computer' })),
     el('span', { className: 'set-clock' }, meterTime, ' / ', computerTime), syncBtn));
   rows.push({ load: readClock, reset: () => { meterTime.textContent = computerTime.textContent = ''; } });
 
-  BASIC.forEach((spec) => propertyRow(basic, spec));
-  ADVANCED.forEach((spec) => propertyRow(advanced, spec));
+  PROPERTIES.forEach((spec) => propertyRow(containers[spec.group], spec));
 
   for (const [field, label] of OWNER_FIELDS) {
-    addRow(advanced, label, el('input', { type: 'text', id: `set-owner-${field}`, maxLength: 40, spellcheck: false }), {
+    addRow(containers.owner, label, el('input', { type: 'text', id: `set-owner-${field}`, maxLength: 40, spellcheck: false }), {
       read: (m) => m.getOwnerField(field),
       write: (m, value) => m.setOwnerField(field, value.trim()),
       hint: 'owner',
@@ -1387,7 +2295,7 @@ function initSettings({ basic, advanced, message, getMeter }) {
   }
 
   for (let i = 0; i < SAVE_SLOTS; i++) {
-    addRow(advanced, `Save slot ${i + 1}`, el('input', { type: 'text', id: `set-save-${i}`, maxLength: 20, spellcheck: false }), {
+    addRow(containers.slots, `Save slot ${i + 1}`, el('input', { type: 'text', id: `set-save-${i}`, maxLength: 20, spellcheck: false }), {
       read: (m) => m.getSaveName(i),
       write: (m, value) => m.setSaveName(i, value.trim()),
       hint: 'name',
@@ -1415,6 +2323,8 @@ function initSettings({ basic, advanced, message, getMeter }) {
 __modules["app"] = (() => {
   const { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } = __modules["format"];
   const { LiveGraph } = __modules["graph"];
+  const { pointsToText } = __modules["graph-text"];
+  const { initMemory } = __modules["memory-ui"];
   const { Meter, MeterError } = __modules["meter"];
   const { initSettings } = __modules["settings-ui"];
   const { WebSerialTransport } = __modules["transport"];
@@ -1427,13 +2337,30 @@ let failures = 0;
 let recording = false;
 let rows = [];
 
+let dataTitle = '';
+let liveZoom = '40';
+
+// Reflects which dataset the graph shows: live buffer or downloaded memory data.
+function showGraphView(view) {
+  const data = view === 'data';
+  $('viewLive').setAttribute('aria-pressed', String(!data));
+  $('viewData').setAttribute('aria-pressed', String(data));
+  $('viewData').disabled = !graph.hasData;
+  $('dataHint').hidden = graph.hasData;
+  $('live').disabled = data ? false : graph.following;
+  $('zoom').value = data ? 'fit' : liveZoom;
+  $('graphTitle').textContent = data ? dataTitle : 'Reading over time';
+  $('graphCount').textContent = data ? `${graph.length} points` : `${graph.length} samples`;
+}
+
 const graph = new LiveGraph({
   scroll: $('graphScroll'),
   inner: $('graphInner'),
   canvas: $('graph'),
   onFollowChange: (following) => {
-    $('live').disabled = following;
+    if (graph.view === 'live') $('live').disabled = following;
   },
+  onViewChange: (view) => showGraphView(view),
   onRangeChange: (min, max, auto) => {
     $('yAuto').setAttribute('aria-pressed', String(auto));
     // Don't overwrite a limit while the user is typing it.
@@ -1459,14 +2386,33 @@ function setConnected(connected) {
   $('choose').disabled = connected || !WebSerialTransport.supported;
   $('disconnect').disabled = !connected;
   $('record').disabled = !connected;
-  $('settingsCard').hidden = !connected;
+  document.body.classList.toggle('connected', connected);
+  $('settingsState').textContent = connected ? '' : 'meter settings need a connection';
+  $('memoryCard').hidden = !connected;
   document.querySelectorAll('.needs-meter').forEach((el) => (el.disabled = !connected));
   $('readout').classList.toggle('stale', !connected);
 }
 
+// Memory reads share the IR link with the live polling, so polling pauses while they run.
+let paused = false;
+const memory = initMemory({
+  counts: $('memoryCounts'),
+  message: $('memoryMsg'),
+  body: $('memoryBody'),
+  readButton: $('memoryRead'),
+  csvButton: $('memoryCsv'),
+  getMeter: () => meter,
+  setBusy: (busy) => (paused = busy),
+  showTrend: ({ title, unit, style, points }) => {
+    dataTitle = title;
+    graph.setData({ points, unit, style });
+  },
+});
+
 const settings = initSettings({
-  basic: $('settingsBasic'),
-  advanced: $('settingsAdvanced'),
+  containers: {
+    display: $('setDisplay'), power: $('setPower'), measure: $('setMeasure'), owner: $('setOwner'), slots: $('setSlots'),
+  },
   message: $('settingsMsg'),
   getMeter: () => meter,
 });
@@ -1488,6 +2434,7 @@ async function connect({ choose = false } = {}) {
       setConnected(true);
       poll();
       settings.load();
+      memory.loadSummary();
     } catch (e) {
       await candidate.close();
       throw e;
@@ -1513,6 +2460,7 @@ async function disconnect(message = 'Not connected', kind = '') {
   setConnected(false);
   $('battery').hidden = true;
   settings.reset();
+  memory.reset();
   setStatus(message, kind);
 }
 
@@ -1563,6 +2511,10 @@ async function poll() {
   batteryChecked = 0;
   batterySupported = true;
   while (polling && meter) {
+    if (paused) {
+      await new Promise((r) => setTimeout(r, 200));
+      continue;
+    }
     const started = performance.now();
     try {
       render(await meter.queryDisplay());
@@ -1586,6 +2538,7 @@ function render(d) {
   $('unit').textContent = f.unit;
   $('coupling').textContent = f.coupling;
   $('func').textContent = prettyFunction(d.primaryFunction);
+  $('miniValue').textContent = `${f.text} ${f.unit} ${f.coupling}`.trim();
   $('modes').textContent = d.modes.map(prettyFunction).join(' · ');
 
   const sec = d.readings.SECONDARY;
@@ -1608,8 +2561,10 @@ function render(d) {
   const now = Date.now();
   graph.add(now, main.state === 'NORMAL' ? main.value : NaN, unitSymbol(main.baseUnit));
   $('yUnit').textContent = unitSymbol(main.baseUnit);
-  $('graphTitle').textContent = `${prettyFunction(d.primaryFunction)} over time`;
-  $('graphCount').textContent = `${graph.length} samples`;
+  if (graph.view === 'live') {
+    $('graphTitle').textContent = `${prettyFunction(d.primaryFunction)} over time`;
+    $('graphCount').textContent = `${graph.length} samples`;
+  }
 
   if (recording) {
     rows.push([
@@ -1646,10 +2601,16 @@ $('record').onclick = () => {
   $('export').disabled = rows.length === 0;
 };
 $('export').onclick = exportCsv;
-$('zoom').onchange = (e) => graph.setScale(Number(e.target.value));
-$('live').onclick = () => graph.jumpToLive();
+$('zoom').onchange = (e) => {
+  if (graph.view === 'live') liveZoom = e.target.value;
+  graph.setScale(e.target.value === 'fit' ? 'fit' : Number(e.target.value));
+};
+$('live').onclick = () => (graph.view === 'data' ? graph.showLive() : graph.jumpToLive());
+$('viewLive').onclick = () => graph.showLive();
+$('viewData').onclick = () => graph.showData();
 $('clearGraph').onclick = () => {
-  graph.clear();
+  graph.clear(); // in the downloaded view this drops that dataset and returns to live
+  showGraphView(graph.view);
   $('graphCount').textContent = '';
 };
 
@@ -1742,7 +2703,7 @@ $('exportJpg').onclick = () => {
   }, 'image/jpeg', 0.92);
 };
 
-$('copyGraph').onclick = async () => {
+async function copyImage() {
   const canvas = graphImage();
   if (!canvas) return;
   try {
@@ -1752,9 +2713,90 @@ $('copyGraph').onclick = async () => {
   } catch (e) {
     graphMessage(`Could not copy: ${e.message}`);
   }
-};
+}
+$('copyGraph').onclick = copyImage;
+
+// x,y values as tab-separated text (time in local time, value in base units).
+async function copyValues(all) {
+  const points = all ? graph.allPoints() : graph.visiblePoints();
+  if (!points.length) return graphMessage('Nothing to copy yet');
+  try {
+    await navigator.clipboard.writeText(pointsToText(points, graph.unit));
+    graphMessage(`Copied ${points.length} x,y values`);
+  } catch (e) {
+    graphMessage(`Could not copy: ${e.message}`);
+  }
+}
+
+// Right-click menu on the graph. Ctrl/Cmd+C with the graph focused copies the visible values too.
+const menu = $('graphMenu');
+const closeMenu = () => (menu.hidden = true);
+$('graphScroll').addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  menu.hidden = false;
+  const x = Math.min(e.clientX, window.innerWidth - menu.offsetWidth - 8);
+  const y = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 8);
+  menu.style.left = `${Math.max(8, x)}px`;
+  menu.style.top = `${Math.max(8, y)}px`;
+  $('ctxVisible').focus();
+});
+$('ctxVisible').onclick = () => (closeMenu(), copyValues(false));
+$('ctxAll').onclick = () => (closeMenu(), copyValues(true));
+$('ctxImage').onclick = () => (closeMenu(), copyImage());
+document.addEventListener('pointerdown', (e) => menu.contains(e.target) || closeMenu());
+document.addEventListener('keydown', (e) => e.key === 'Escape' && closeMenu());
+window.addEventListener('blur', closeMenu);
+window.addEventListener('resize', closeMenu);
+window.addEventListener('scroll', closeMenu, true);
+$('graphScroll').addEventListener('copy', (e) => {
+  const points = graph.visiblePoints();
+  if (!points.length) return;
+  e.preventDefault();
+  e.clipboardData.setData('text/plain', pointsToText(points, graph.unit));
+  graphMessage(`Copied ${points.length} x,y values`);
+});
 
 $('settingsReload').onclick = () => settings.load();
+
+// Collapsible cards remember whether they were open.
+for (const card of document.querySelectorAll('details.collapsible')) {
+  const key = `fluke287.open.${card.id}`;
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved !== null) card.open = saved === '1';
+  } catch {
+    /* storage blocked: keep the default */
+  }
+  card.addEventListener('toggle', () => {
+    try {
+      localStorage.setItem(key, card.open ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+// Settings tabs (Meter / Owner & save slots / Reset & tools / Viewer).
+const tabs = [...document.querySelectorAll('[role=tab]')];
+function selectTab(tab) {
+  for (const t of tabs) {
+    const on = t === tab;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    $(t.getAttribute('aria-controls')).hidden = !on;
+  }
+}
+tabs.forEach((tab, i) => {
+  tab.addEventListener('click', () => selectTab(tab));
+  tab.addEventListener('keydown', (e) => {
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    const target = tabs[(next + tabs.length) % tabs.length];
+    selectTab(target);
+    target.focus();
+  });
+});
 
   return {  };
 })();

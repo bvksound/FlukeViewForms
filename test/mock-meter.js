@@ -3,6 +3,8 @@ import { LineBuffer } from '../src/transport.js';
 
 export class MockTransport {
   #lines = new LineBuffer();
+  // Tests register handlers: (command) => Uint8Array (a binary reply) | string (a text reply) | undefined (not mine).
+  handlers = [];
   props = { beeper: 'ON', digits: '5', ablto: '900', apoffto: '2100', dateFmt: 'DD_MM', timeFmt: '24', numFmt: 'POINT', tempOS: '0', aheventTh: '4', lang: 'ENGLISH', clock: '1789918816' };
   owner = { company: 'ACME', site: 'Lab', operator: 'Sam', contact: '123' };
   saveNames = ['Save', 'Site 1'];
@@ -10,6 +12,21 @@ export class MockTransport {
 
   write(text) {
     const cmd = text.trim().toUpperCase();
+    for (const handler of this.handlers) {
+      const out = handler(text.trim());
+      if (out instanceof Uint8Array) {
+        // Binary block, delivered in awkward pieces like a real serial port would.
+        const wire = Uint8Array.from([0x30, 0x0d, 0x23, 0x30, ...out, 0x0d]);
+        const cut = Math.max(1, Math.floor(wire.length / 3));
+        setTimeout(() => this.#lines.push(wire.subarray(0, cut)), 5);
+        setTimeout(() => this.#lines.push(wire.subarray(cut)), 15);
+        return Promise.resolve();
+      }
+      if (typeof out === 'string') {
+        setTimeout(() => this.#lines.push(`0\r${out}\r`), 5);
+        return Promise.resolve();
+      }
+    }
     const reply = (...lines) => setTimeout(() => this.#lines.push(lines.join('\r') + '\r'), 15);
     if (cmd === 'ID') reply('0', 'FLUKE 287,V1.00,00000000');
     else if (/^QMP /.test(cmd)) {
@@ -58,6 +75,10 @@ export class MockTransport {
 
   readLine(timeoutMs) {
     return this.#lines.readLine(timeoutMs);
+  }
+
+  readBinary(timeoutMs, settleMs) {
+    return this.#lines.readBinary(timeoutMs, settleMs);
   }
 
   flush() {

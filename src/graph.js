@@ -9,7 +9,7 @@ const PAD_T = 14;
 const PAD_B = 24;
 const PAD_R = 16;
 const MAX_POINTS = 36000; // 5 h at 2 samples/s
-const TIME_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
+const TIME_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600, 7200, 21600, 43200, 86400, 172800, 604800];
 const PREFIXES = [[-9, 'n'], [-6, 'µ'], [-3, 'm'], [0, ''], [3, 'k'], [6, 'M']];
 
 function niceStep(rough) {
@@ -26,7 +26,7 @@ function prefixFor(maxAbs) {
 }
 
 // Light palette for exported images, so they read well on paper and in documents.
-const PRINT_COLORS = { line: '#0b7a75', grid: '#e3e7ea', axis: '#5b6670', text: '#3a444c', title: '#10151a', bg: '#ffffff' };
+const PRINT_COLORS = { band: 'rgba(11,122,117,.16)', line: '#0b7a75', grid: '#e3e7ea', axis: '#5b6670', text: '#3a444c', title: '#10151a', bg: '#ffffff' };
 
 const pad2 = (n) => String(n).padStart(2, '0');
 function clock(ms) {
@@ -34,26 +34,44 @@ function clock(ms) {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 }
 
+// Axis label for a tick; long spans (downloaded recordings) need the date as well.
+function stamp(ms, stepSeconds) {
+  const d = new Date(ms);
+  const date = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  if (stepSeconds >= 86400) return date;
+  if (stepSeconds >= 3600) return `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return clock(ms);
+}
+
 export class LiveGraph {
   #scroll;
   #inner;
   #canvas;
   #onFollow;
-  #points = []; // { t: ms, v: base-unit value or NaN for an invalid/overload reading }
-  #unit = ''; // caller-supplied symbol for the base unit, e.g. 'V'
-  #pps = 40; // pixels per second
+  // Two datasets share the canvas: the live buffer, and a downloaded one (recording, saved measurements).
+  // A point is { t: ms, v: base-unit value or NaN for an invalid/overload reading, lo?, hi? } (lo/hi = min/max band).
+  #live = [];
+  #liveUnit = ''; // caller-supplied symbol for the base unit, e.g. 'V'
+  #data = null; // { points, unit, style: 'line' | 'points' }
+  #view = 'live';
+  #pps = 40; // pixels per second for the current view
+  #livePps = 40;
+  #fit = false; // downloaded view: keep the whole dataset fitted to the width
   #follow = true;
+  #liveScroll = 0;
+  #onView;
   #colors;
   #manualY = null; // { min, max } in base units, or null for auto-scale
   #shownY = { min: -1, max: 1 }; // range used by the last draw
   #onRange;
 
-  constructor({ scroll, inner, canvas, onFollowChange = () => {}, onRangeChange = () => {} }) {
+  constructor({ scroll, inner, canvas, onFollowChange = () => {}, onRangeChange = () => {}, onViewChange = () => {} }) {
     this.#scroll = scroll;
     this.#inner = inner;
     this.#canvas = canvas;
     this.#onFollow = onFollowChange;
     this.#onRange = onRangeChange;
+    this.#onView = onViewChange;
     this.#enableDragPan();
     this.#readColors();
     scroll.addEventListener('scroll', () => {
@@ -64,7 +82,7 @@ export class LiveGraph {
       }
       this.#draw();
     });
-    new ResizeObserver(() => this.#layout()).observe(scroll);
+    new ResizeObserver(() => this.#layout(null, true)).observe(scroll);
     this.#layout();
   }
 
@@ -76,10 +94,92 @@ export class LiveGraph {
     return this.#follow;
   }
 
+  get #points() {
+    return this.#view === 'live' ? this.#live : this.#data.points;
+  }
+
+  get #unit() {
+    return this.#view === 'live' ? this.#liveUnit : this.#data.unit;
+  }
+
+  get view() {
+    return this.#view;
+  }
+
+  get hasData() {
+    return this.#data !== null;
+  }
+
+  // Symbol of the base unit of what is shown ('V', 'A', 'Ω'…).
+  get unit() {
+    return this.#unit;
+  }
+
+  allPoints() {
+    return this.#points.map((p) => ({ ...p }));
+  }
+
+  // The points inside the time window currently on screen.
+  visiblePoints() {
+    const pts = this.#points;
+    if (!pts.length) return [];
+    const t0 = pts[0].t;
+    const left = this.#scroll.scrollLeft;
+    const plotW = this.#scroll.clientWidth - AXIS_W - PAD_R;
+    const tMin = t0 + (left / this.#pps) * 1000;
+    const tMax = t0 + ((left + plotW) / this.#pps) * 1000;
+    return pts.filter((p) => p.t >= tMin && p.t <= tMax).map((p) => ({ ...p }));
+  }
+
+  // Shows a downloaded dataset instead of the live trace; the live buffer keeps filling in the background.
+  setData({ points, unit, style = 'line' }) {
+    this.#data = { points: [...points].sort((a, b) => a.t - b.t), unit, style };
+    this.#enterData();
+  }
+
+  // Back to the dataset last shown (after looking at the live trace).
+  showData() {
+    if (this.#data) this.#enterData();
+  }
+
+  #enterData() {
+    if (this.#view === 'live') {
+      this.#livePps = this.#pps;
+      this.#liveScroll = this.#scroll.scrollLeft;
+    }
+    this.#view = 'data';
+    this.#manualY = null;
+    this.#follow = false;
+    this.#onFollow(false);
+    this.#fit = true;
+    this.#scroll.scrollLeft = 0;
+    this.#layout();
+    this.#onView('data');
+  }
+
+  showLive() {
+    if (this.#view === 'live') return;
+    this.#view = 'live';
+    this.#manualY = null;
+    this.#fit = false;
+    this.#pps = this.#livePps;
+    this.#follow = true;
+    this.#onFollow(true);
+    this.#layout();
+    this.#onView('live');
+  }
+
+  clearData() {
+    this.#data = null;
+    this.showLive();
+    this.#onView('live');
+  }
+
   #readColors() {
     const s = getComputedStyle(document.documentElement);
     const get = (n, fallback) => s.getPropertyValue(n).trim() || fallback;
     this.#colors = {
+      band: 'rgba(63, 209, 199, .16)',
       line: get('--trace', '#3fd1c7'),
       grid: get('--border', '#1c242c'),
       axis: get('--muted2', '#5b6670'),
@@ -90,28 +190,30 @@ export class LiveGraph {
 
   // `unit` is the base unit's symbol; a different unit than before starts a fresh trace.
   add(t, value, unit) {
-    if (unit !== this.#unit) {
-      this.#points = [];
-      this.#unit = unit;
+    if (unit !== this.#liveUnit) {
+      this.#live = [];
+      this.#liveUnit = unit;
     }
-    this.#points.push({ t, v: value });
-    if (this.#points.length > MAX_POINTS) this.#trim(MAX_POINTS / 10);
-    this.#layout();
+    this.#live.push({ t, v: value });
+    if (this.#live.length > MAX_POINTS) this.#trim(MAX_POINTS / 10);
+    if (this.#view === 'live') this.#layout();
   }
 
   #trim(count) {
-    const oldT0 = this.#points[0].t;
-    this.#points.splice(0, count);
-    if (!this.#follow) {
+    const oldT0 = this.#live[0].t;
+    this.#live.splice(0, count);
+    if (this.#view === 'live' && !this.#follow) {
       // Keep the window the user is looking at in place.
-      const shift = ((this.#points[0].t - oldT0) / 1000) * this.#pps;
+      const shift = ((this.#live[0].t - oldT0) / 1000) * this.#pps;
       this.#scroll.scrollLeft = Math.max(0, this.#scroll.scrollLeft - shift);
     }
   }
 
+  // Clears the live trace; in the downloaded view it drops that dataset and returns to live.
   clear() {
-    this.#points = [];
-    this.#unit = '';
+    if (this.#view === 'data') return this.clearData();
+    this.#live = [];
+    this.#liveUnit = '';
     this.#manualY = null;
     this.#layout();
   }
@@ -165,10 +267,24 @@ export class LiveGraph {
     canvas.addEventListener('pointercancel', end);
   }
 
+  // A number of pixels per second, or 'fit' to squeeze the whole dataset into the width.
   setScale(pixelsPerSecond) {
     const anchor = this.#anchorTime();
-    this.#pps = pixelsPerSecond;
+    if (pixelsPerSecond === 'fit') {
+      this.#pps = this.#fitScale();
+      this.#fit = this.#view === 'data';
+    } else {
+      this.#pps = pixelsPerSecond;
+      this.#fit = false;
+    }
     this.#layout(anchor);
+  }
+
+  #fitScale() {
+    const pts = this.#points;
+    const span = pts.length > 1 ? (pts[pts.length - 1].t - pts[0].t) / 1000 : 0;
+    const room = this.#scroll.clientWidth - AXIS_W - PAD_R - 8;
+    return span > 0 && room > 0 ? Math.max(room / span, 1e-4) : this.#pps;
   }
 
   jumpToLive() {
@@ -181,7 +297,12 @@ export class LiveGraph {
     return this.#points[0].t + ((this.#scroll.scrollLeft) / this.#pps) * 1000;
   }
 
-  #layout(anchorTime = null) {
+  #layout(anchorTime = null, resized = false) {
+    if (this.#fit && this.#view === 'data') {
+      this.#pps = this.#fitScale();
+      anchorTime = null;
+      if (!resized) this.#scroll.scrollLeft = 0;
+    }
     const pts = this.#points;
     const viewW = this.#scroll.clientWidth;
     const span = pts.length ? ((pts[pts.length - 1].t - pts[0].t) / 1000) * this.#pps : 0;
@@ -240,10 +361,11 @@ export class LiveGraph {
 
     let vMin = Infinity, vMax = -Infinity;
     for (let i = lo; i <= hi; i++) {
-      const v = pts[i].v;
-      if (Number.isFinite(v)) {
-        if (v < vMin) vMin = v;
-        if (v > vMax) vMax = v;
+      for (const v of [pts[i].v, pts[i].lo, pts[i].hi]) {
+        if (Number.isFinite(v)) {
+          if (v < vMin) vMin = v;
+          if (v > vMax) vMax = v;
+        }
       }
     }
     if (vMin === Infinity) {
@@ -300,7 +422,7 @@ export class LiveGraph {
       g.lineTo(x, plotB);
       g.stroke();
       g.fillStyle = c.axis;
-      g.fillText(clock(s * 1000), x, H - 6);
+      g.fillText(stamp(s * 1000, secPerLabel), x, H - 6);
     }
 
     // Axes
@@ -316,7 +438,31 @@ export class LiveGraph {
     g.beginPath();
     g.rect(plotL, plotT - 2, plotR - plotL, plotB - plotT + 4);
     g.clip();
+    const dots = this.#view === 'data' && this.#data.style === 'points';
+
+    // Min/max band behind the line (recording samples carry it).
+    if (!dots && pts.slice(lo, hi + 1).some((p) => Number.isFinite(p.lo) && Number.isFinite(p.hi))) {
+      g.fillStyle = c.band;
+      g.beginPath();
+      const run = [];
+      const flush = () => {
+        if (run.length > 1) {
+          run.forEach((p, i) => (i ? g.lineTo(xAt(p.t), yAt(p.hi)) : g.moveTo(xAt(p.t), yAt(p.hi))));
+          [...run].reverse().forEach((p) => g.lineTo(xAt(p.t), yAt(p.lo)));
+          g.closePath();
+        }
+        run.length = 0;
+      };
+      for (let i = lo; i <= hi; i++) {
+        if (Number.isFinite(pts[i].lo) && Number.isFinite(pts[i].hi)) run.push(pts[i]);
+        else flush();
+      }
+      flush();
+      g.fill();
+    }
+
     g.strokeStyle = c.line;
+    g.fillStyle = c.line;
     g.lineWidth = 2;
     g.lineJoin = 'round';
     g.beginPath();
@@ -328,14 +474,19 @@ export class LiveGraph {
         continue;
       }
       const x = xAt(t), y = yAt(v);
+      if (dots) {
+        g.moveTo(x + 4, y);
+        g.arc(x, y, 4, 0, Math.PI * 2);
+        continue;
+      }
       if (pen) g.lineTo(x, y);
       else g.moveTo(x, y);
       pen = true;
     }
-    g.stroke();
+    if (dots) g.fill();
+    else g.stroke();
     const last = pts[pts.length - 1];
-    if (Number.isFinite(last.v) && hi === pts.length - 1) {
-      g.fillStyle = c.line;
+    if (this.#view === 'live' && Number.isFinite(last.v) && hi === pts.length - 1) {
       g.beginPath();
       g.arc(xAt(last.t), yAt(last.v), 3.5, 0, Math.PI * 2);
       g.fill();

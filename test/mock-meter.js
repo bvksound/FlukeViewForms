@@ -9,6 +9,7 @@ export class MockTransport {
     const cmd = text.trim().toUpperCase();
     const reply = (...lines) => setTimeout(() => this.#lines.push(lines.join('\r') + '\r'), 15);
     if (cmd === 'ID') reply('0', 'FLUKE 287,V1.00,00000000');
+    else if (cmd === 'QBL') reply('0', 'PARTLY_EMPTY_2');
     else if (cmd === 'QM') {
       const v = this.#value();
       reply('0', `${v.toExponential(4).toUpperCase()},VDC,NORMAL,NONE`);

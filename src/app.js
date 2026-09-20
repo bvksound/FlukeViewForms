@@ -1,6 +1,6 @@
-import { formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
+import { formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
 import { LiveGraph } from './graph.js';
-import { Meter } from './meter.js';
+import { Meter, MeterError } from './meter.js';
 import { WebSerialTransport } from './transport.js';
 
 const $ = (id) => document.getElementById(id);
@@ -86,16 +86,40 @@ async function disconnect(message = 'Not connected', kind = '') {
   meter = null;
   await m?.close();
   setConnected(false);
+  $('battery').hidden = true;
   setStatus(message, kind);
+}
+
+const BATTERY_EVERY_MS = 30_000;
+let batteryChecked = 0;
+let batterySupported = true;
+
+// The meter words the level itself (FULL, PARTLY_EMPTY_2, EMPTY…); we show that text and only warn on EMPTY.
+async function updateBattery() {
+  batteryChecked = Date.now();
+  try {
+    const code = await meter.queryBattery();
+    const el = $('battery');
+    const low = /^EMPTY/.test(code);
+    el.hidden = false;
+    el.classList.toggle('low', low);
+    el.innerHTML = `<svg viewBox="0 0 26 13" aria-hidden="true"><rect x="0.75" y="0.75" width="21" height="11.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="23" y="4" width="2.5" height="5" rx="1" fill="currentColor"/></svg>`;
+    el.append(`Battery: ${formatBattery(code)}`);
+  } catch (e) {
+    if (e instanceof MeterError) batterySupported = false; // older firmware without QBL: stop asking
+  }
 }
 
 async function poll() {
   if (polling) return;
   polling = true;
+  batteryChecked = 0;
+  batterySupported = true;
   while (polling && meter) {
     const started = performance.now();
     try {
       render(await meter.queryDisplay());
+      if (batterySupported && Date.now() - batteryChecked > BATTERY_EVERY_MS) await updateBattery();
       failures = 0;
     } catch (e) {
       // A dropped reply is normal when the meter is off or the IR path is blocked; give up after a few.
@@ -238,4 +262,47 @@ $('rawForm').onsubmit = async (e) => {
     append(`! ${err.message}`);
   }
   $('rawCmd').select();
+};
+
+// Export / copy the graph as an image. JPG downloads; the clipboard only takes PNG.
+let graphMsgTimer;
+function graphMessage(text) {
+  $('graphMsg').textContent = text;
+  clearTimeout(graphMsgTimer);
+  graphMsgTimer = setTimeout(() => ($('graphMsg').textContent = ''), 4000);
+}
+
+function graphImage() {
+  const canvas = graph.exportCanvas({
+    title: $('graphTitle').textContent,
+    subtitle: [$('status').textContent.startsWith('FLUKE') ? $('status').textContent : '', new Date().toLocaleDateString()]
+      .filter(Boolean)
+      .join('  ·  '),
+  });
+  if (!canvas) graphMessage('Nothing to export yet');
+  return canvas;
+}
+
+$('exportJpg').onclick = () => {
+  const canvas = graphImage();
+  canvas?.toBlob((blob) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `fluke287-graph-${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    graphMessage('Saved JPG');
+  }, 'image/jpeg', 0.92);
+};
+
+$('copyGraph').onclick = async () => {
+  const canvas = graphImage();
+  if (!canvas) return;
+  try {
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    graphMessage('Copied to clipboard');
+  } catch (e) {
+    graphMessage(`Could not copy: ${e.message}`);
+  }
 };

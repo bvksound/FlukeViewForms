@@ -69,3 +69,11 @@ export function parseEng(text) {
   const exp = { n: -9, u: -6, m: -3, k: 3, M: 6 }[m[2]] ?? 0;
   return Number(m[1]) * 10 ** exp;
 }
+
+// "PARTLY_EMPTY_2" -> "Partly empty (2)", "FULL" -> "Full". The meter's own wording is kept; only the case changes.
+export function formatBattery(code) {
+  const words = code.trim().split('_');
+  const level = /^\d+$/.test(words.at(-1)) && words.length > 1 ? words.pop() : null;
+  const text = words.join(' ').toLowerCase();
+  return text[0].toUpperCase() + text.slice(1) + (level ? ` (${level})` : '');
+}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatEng, formatReading, parseEng, prettyFunction } from '../src/format.js';
+import { formatBattery, formatEng, formatReading, parseEng, prettyFunction } from '../src/format.js';
 import { Meter, MeterError } from '../src/meter.js';
 import { MockTransport } from './mock-meter.js';
 import { ProtocolError, parseAck, parseId, parseQdda, parseQm } from '../src/protocol.js';
@@ -82,6 +82,12 @@ test('prettyFunction writes units with the right case', () => {
   assert.equal(prettyFunction('NONE'), '');
 });
 
+test('formatBattery keeps the meter wording', () => {
+  assert.equal(formatBattery('PARTLY_EMPTY_2'), 'Partly empty (2)');
+  assert.equal(formatBattery('FULL'), 'Full');
+  assert.equal(formatBattery('EMPTY\r'), 'Empty');
+});
+
 test('formatEng / parseEng round-trip axis limits', () => {
   assert.equal(formatEng(0.00503), '5.03m');
   assert.equal(formatEng(1500), '1.5k');
@@ -124,6 +130,7 @@ test('Meter talks to the mock meter', async () => {
   assert.equal((await meter.identify()).model, 'FLUKE 287');
   assert.equal((await meter.queryMeasurement()).unit, 'VDC');
   assert.equal((await meter.queryDisplay()).primaryFunction, 'V_DC');
+  assert.equal(await meter.queryBattery(), 'PARTLY_EMPTY_2');
   await assert.rejects(meter.command('BOGUS'), MeterError);
   // Concurrent commands are serialized rather than interleaved.
   const [a, b] = await Promise.all([meter.queryDisplay(), meter.queryMeasurement()]);

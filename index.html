@@ -106,6 +106,9 @@
   /* Labels containing SI units (mV, µA, kΩ…) must keep their case; never text-transform them. */
   #func,#modes,#graphTitle{text-transform:none;letter-spacing:.04em;font-size:13px;}
   #func{color:var(--teal);}
+  .battery{text-transform:none;letter-spacing:.04em;font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:8px;}
+  .battery svg{width:26px;height:13px;}
+  .battery.low{color:var(--red);}
   .readout{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:14px 0 4px;}
   #value{
     font:700 clamp(52px,13vw,104px)/1 var(--mono);color:var(--teal);
@@ -154,6 +157,7 @@
   .raw input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 2px rgba(63,209,199,.18);}
   #rawLog{margin:12px 0 0;max-height:220px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:12px/1.5 var(--mono);color:var(--muted);white-space:pre-wrap;word-break:break-all;}
   #advResult{font-family:var(--mono);font-size:12px;color:var(--muted);min-height:1.4em;margin-top:12px;}
+  .spacer{flex:1;}
   .hint{font-size:12px;color:var(--muted2);}
   #count{font-family:var(--mono);font-size:12px;color:var(--muted2);}
   .foot-note{max-width:760px;margin:20px auto 0;font-size:13px;color:var(--muted2);text-align:center;}
@@ -193,7 +197,7 @@
   <section class="live" aria-label="Live view">
     <div class="wrap">
       <div class="card">
-        <div class="meta"><span id="func"></span><span id="modes"></span></div>
+        <div class="meta"><span id="func"></span><span id="modes"></span><span id="battery" class="battery" hidden title="Meter battery level (QBL)"></span></div>
         <div class="readout stale" id="readout" aria-live="off">
           <span id="value">----</span><span id="unit"></span><span id="coupling"></span>
         </div>
@@ -226,6 +230,10 @@
           </label>
           <button id="live" class="btn btn-ghost btn-sm" disabled>Jump to live</button>
           <button id="clearGraph" class="btn btn-ghost btn-sm">Clear graph</button>
+          <span class="spacer"></span>
+          <button id="exportJpg" class="btn btn-ghost btn-sm" title="Save the visible part of the graph as a JPG image">Export JPG</button>
+          <button id="copyGraph" class="btn btn-ghost btn-sm" title="Copy the visible part of the graph to the clipboard as an image">Copy image</button>
+          <span id="graphMsg" class="hint" role="status"></span>
         </div>
         <div class="controls">
           <span class="ygroup">Y axis

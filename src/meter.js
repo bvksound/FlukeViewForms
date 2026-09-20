@@ -53,6 +53,11 @@ export class Meter {
     return parseQdda(await this.command('QDDA'));
   }
 
+  // Battery level as the meter words it, e.g. "PARTLY_EMPTY_2". Undocumented; found by scanning a 287 (V1.16).
+  async queryBattery() {
+    return (await this.command('QBL')).trim();
+  }
+
   // Documented setup commands (see docs/protocol.md). None of them return data.
   defaultSetup() {
     return this.command('DS', { data: false });

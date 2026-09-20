@@ -25,6 +25,9 @@ function prefixFor(maxAbs) {
   return maxAbs === 0 ? PREFIXES[3] : pick;
 }
 
+// Light palette for exported images, so they read well on paper and in documents.
+const PRINT_COLORS = { line: '#0b7a75', grid: '#e3e7ea', axis: '#5b6670', text: '#3a444c', title: '#10151a', bg: '#ffffff' };
+
 const pad2 = (n) => String(n).padStart(2, '0');
 function clock(ms) {
   const d = new Date(ms);
@@ -205,8 +208,13 @@ export class LiveGraph {
     }
     const g = canvas.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const c = this.#colors;
     g.clearRect(0, 0, W, H);
+    this.#paint(g, W, H, this.#colors, true);
+  }
+
+  // Paints the current view into `g` (already scaled to CSS pixels). Returns the visible time span in ms,
+  // or null when there is nothing to show. `notify` reports the Y range to the page (screen draws only).
+  #paint(g, W, H, c, notify) {
     g.font = '11px ui-monospace, Menlo, Consolas, monospace';
 
     const pts = this.#points;
@@ -215,7 +223,7 @@ export class LiveGraph {
       g.fillStyle = c.axis;
       g.textAlign = 'center';
       g.fillText('Waiting for readings…', W / 2, H / 2);
-      return;
+      return null;
     }
 
     const t0 = pts[0].t;
@@ -255,7 +263,7 @@ export class LiveGraph {
       vMax += margin;
     }
     this.#shownY = { min: vMin, max: vMax };
-    this.#onRange(vMin, vMax, this.#manualY === null);
+    if (notify) this.#onRange(vMin, vMax, this.#manualY === null);
     const yAt = (v) => plotB - ((v - vMin) / (vMax - vMin)) * (plotB - plotT);
 
     // Y grid + labels
@@ -333,6 +341,39 @@ export class LiveGraph {
       g.fill();
     }
     g.restore();
+    return { tMin, tMax };
+  }
+
+  // Renders what is on screen as a print-friendly image (white background, title strip on top).
+  // Returns a canvas, or null when there is no data yet.
+  exportCanvas({ title = '', subtitle = '', scale = 2 } = {}) {
+    const W = this.#scroll.clientWidth;
+    const H = this.#inner.clientHeight;
+    if (!this.#points.length || !W || !H) return null;
+    const HEAD = 46;
+    const out = document.createElement('canvas');
+    out.width = Math.round(W * scale);
+    out.height = Math.round((H + HEAD) * scale);
+    const g = out.getContext('2d');
+    g.scale(scale, scale);
+    g.fillStyle = PRINT_COLORS.bg;
+    g.fillRect(0, 0, W, H + HEAD);
+
+    g.save();
+    g.translate(0, HEAD);
+    const span = this.#paint(g, W, H, PRINT_COLORS, false);
+    g.restore();
+
+    g.textBaseline = 'alphabetic';
+    g.textAlign = 'left';
+    g.fillStyle = PRINT_COLORS.title;
+    g.font = '600 15px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+    g.fillText(title, 12, 22);
+    g.fillStyle = PRINT_COLORS.text;
+    g.font = '12px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+    const range = span ? `${clock(span.tMin)} – ${clock(span.tMax)}` : '';
+    g.fillText([subtitle, range].filter(Boolean).join('  ·  '), 12, 39);
+    return out;
   }
 
   #firstAtOrAfter(t) {

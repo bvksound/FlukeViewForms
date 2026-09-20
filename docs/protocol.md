@@ -40,6 +40,25 @@ Timestamps are Unix seconds (float) from the meter's clock. `unitMultiplier` is 
 (-9 n, -6 µ, -3 m, 0, 3 k, 6 M). Reading IDs: LIVE, PRIMARY, SECONDARY, REL_LIVE, BARGRAPH, MINIMUM, MAXIMUM, AVERAGE,
 REL_REFERENCE, DB_REF, TEMP_OFFSET.
 
+## Found by scanning a real meter (unofficial)
+
+Observed on a Fluke 287, firmware V1.16, by sending `Q` + 1 to 3 letters and logging every reply that was not a
+syntax error (`1`). These are not in Fluke's spec; meanings are inferred from names and replies unless noted.
+
+| Command | Reply seen | Meaning |
+|---|---|---|
+| `QBL` | `PARTLY_EMPTY_2` | Battery level, in the meter's own words (used by the page). Other values not yet seen. |
+| `QMF` | `MV_AC,NONE` | Current primary and secondary function |
+| `QMR` | `50,-3` | Current range number and unit multiplier |
+| `QMM` | `0` | Active modes (none) |
+| `QSN` | `14560135` | Serial number |
+| `QCVN` | `V0.14` | A version string, not the `ID` firmware version. Purpose unknown |
+| `QCCV` | `4` | Unknown, possibly a version or revision |
+| `QDDB` | binary | Binary form of `QDDA` (display data) |
+
+The scan covered only `Q???` and shorter, so longer names and non-`Q` commands (set commands, memory, recording)
+are still unknown. Commands that change the meter were deliberately never sent.
+
 ## Not documented (needs capture from the official FlukeView Forms)
 
 Reading and writing meter settings, saved measurements, min/max/average recordings, logging sessions, and setting the

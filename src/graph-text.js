@@ -26,3 +26,8 @@ export function pointsToText(points, unit = '', { sep = '\t' } = {}) {
   const { header, rows } = pointsToTable(points, unit);
   return [header, ...rows].map((r) => r.join(sep)).join('\n') + '\n';
 }
+
+// The points between two cursors, inclusive. A null cursor means "no limit" on that side.
+export function pointsBetween(points, start, end) {
+  return points.filter((p) => (start == null || p.t >= start) && (end == null || p.t <= end));
+}

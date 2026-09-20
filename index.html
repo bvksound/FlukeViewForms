@@ -194,8 +194,13 @@
   body.connected .offline-note{display:none;}
   .meter-only{display:none;}
   body.connected .meter-only{display:block;}
-  .ctx{position:fixed;z-index:100;min-width:230px;background:#121a21;border:1px solid #2a3641;border-radius:10px;padding:6px;box-shadow:0 18px 44px -12px rgba(0,0,0,.75);}
-  .ctx button{display:block;width:100%;text-align:left;background:none;border:none;border-radius:6px;padding:9px 12px;font:inherit;font-size:14px;color:var(--text);cursor:pointer;}
+  .ctx{position:fixed;z-index:100;min-width:270px;background:#121a21;border:1px solid #2a3641;border-radius:10px;padding:6px;box-shadow:0 18px 44px -12px rgba(0,0,0,.75);}
+  .ctx button{display:flex;justify-content:space-between;align-items:baseline;gap:28px;width:100%;text-align:left;background:none;border:none;border-radius:6px;padding:9px 12px;font:inherit;font-size:14px;color:var(--text);cursor:pointer;}
+  .ctx button small{font-family:var(--mono);font-size:11.5px;color:var(--muted2);white-space:nowrap;}
+  .ctx button:disabled{opacity:.4;cursor:default;}
+  .ctx button:disabled:hover{background:none;}
+  .ctx .group{padding:9px 12px 3px;font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);}
+  .ctx .group:first-child{padding-top:5px;}
   .ctx hr{border:none;border-top:1px solid #26313b;margin:6px 0;}
   .ctx button:hover,.ctx button:focus-visible{background:rgba(63,209,199,.14);outline:none;}
   .seg{display:inline-flex;}
@@ -219,6 +224,8 @@
   #rawLog{margin:12px 0 0;max-height:220px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:12px/1.5 var(--mono);color:var(--muted);white-space:pre-wrap;word-break:break-all;}
   #advResult{font-family:var(--mono);font-size:12px;color:var(--muted);min-height:1.4em;margin-top:12px;}
   .spacer{flex:1;}
+  .cursor-swatch{display:inline-block;width:18px;border-top:2px dashed var(--amber);}
+  #cursorInfo{font-family:var(--mono);font-size:13px;color:var(--amber);}
   .hint{font-size:12px;color:var(--muted2);}
   #count{font-family:var(--mono);font-size:12px;color:var(--muted2);}
   .foot-note{max-width:760px;margin:20px auto 0;font-size:13px;color:var(--muted2);text-align:center;}
@@ -292,11 +299,13 @@
           <button id="live" class="btn btn-ghost btn-sm" disabled>Jump to live</button>
           <button id="clearGraph" class="btn btn-ghost btn-sm">Clear graph</button>
           <span class="spacer"></span>
-          <button id="exportCsv" class="btn btn-ghost btn-sm" title="Save every point of what the graph shows as a CSV file">Export CSV</button>
-          <button id="exportJpg" class="btn btn-ghost btn-sm" title="Save the visible part of the graph as a JPG image">Export JPG</button>
-          <button id="copyValues" class="btn btn-ghost btn-sm" title="Copy the visible x,y values as text">Copy values</button>
-          <button id="copyGraph" class="btn btn-ghost btn-sm" title="Copy the visible part of the graph to the clipboard as an image">Copy image</button>
           <span id="graphMsg" class="hint" role="status"></span>
+          <span class="hint">Right-click the graph (or press Shift+F10) to export, copy, add cursors and more.</span>
+        </div>
+        <div class="controls cursor-row" id="cursorRow" hidden>
+          <span class="cursor-swatch" aria-hidden="true"></span>
+          <span id="cursorInfo"></span>
+          <button id="cursorClear" class="btn btn-ghost btn-sm">Remove cursors</button>
         </div>
         <div class="controls">
           <span class="ygroup">Y axis
@@ -312,14 +321,7 @@
         </div>
       </details>
 
-      <div id="graphMenu" class="ctx" role="menu" aria-label="Graph" hidden>
-        <button role="menuitem" id="ctxCsv">Export CSV</button>
-        <button role="menuitem" id="ctxJpg">Export JPG</button>
-        <hr>
-        <button role="menuitem" id="ctxVisible">Copy visible x,y values</button>
-        <button role="menuitem" id="ctxAll">Copy all x,y values</button>
-        <button role="menuitem" id="ctxImage">Copy image</button>
-      </div>
+      <div id="graphMenu" class="ctx" role="menu" aria-label="Graph" hidden></div>
 
       <details class="card collapsible memory" id="memoryCard" open hidden>
         <summary class="meta"><span class="title">Meter memory</span><span class="grow"></span><span id="memoryCounts"></span></summary>

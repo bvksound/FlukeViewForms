@@ -7,7 +7,7 @@ import { ProtocolError, parseAck, parseId, parseQdda, parseQm } from '../src/pro
 import { measurementsTrend, recordingTrend, sessionTrend } from '../src/memory-ui.js';
 import { clockValueFor, localClockText, meterClockToText, meterSecondsToLocalMs, minutesToSeconds, secondsToMinutes } from '../src/settings.js';
 import { toCsv } from '../src/csv.js';
-import { localTimestamp, pointsToTable, pointsToText } from '../src/graph-text.js';
+import { localTimestamp, pointsBetween, pointsToTable, pointsToText } from '../src/graph-text.js';
 import { LineBuffer, TimeoutError } from '../src/transport.js';
 
 // Examples taken from the Fluke 289/287 Remote Interface Specification.
@@ -265,4 +265,13 @@ test('sessionTrend: a min/max session as dots, one per stored reading', () => {
   assert.match(trend.title, /Min\/max session "MM 1": 3 readings/);
   assert.deepEqual(trend.points.map((p) => p.v).map((v) => (Number.isNaN(v) ? 'nan' : v)), [-0.02, 4.9, 'nan']);
   assert.equal(sessionTrend({ name: 'x', readings: {} }, 'Peak session'), null);
+});
+
+test('pointsBetween keeps only samples between the cursors (inclusive); null means open-ended', () => {
+  const pts = [10, 20, 30, 40, 50].map((t) => ({ t, v: t }));
+  assert.deepEqual(pointsBetween(pts, 20, 40).map((p) => p.t), [20, 30, 40]);
+  assert.deepEqual(pointsBetween(pts, 25, null).map((p) => p.t), [30, 40, 50]);
+  assert.deepEqual(pointsBetween(pts, null, 25).map((p) => p.t), [10, 20]);
+  assert.deepEqual(pointsBetween(pts, null, null).length, 5);
+  assert.deepEqual(pointsBetween(pts, 41, 49), []);
 });

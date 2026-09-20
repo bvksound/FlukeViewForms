@@ -1,6 +1,6 @@
 import { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
 import { LiveGraph } from './graph.js';
-import { pointsToTable, pointsToText } from './graph-text.js';
+import { localTimestamp, pointsToTable, pointsToText } from './graph-text.js';
 import { toCsv } from './csv.js';
 import { initMemory } from './memory-ui.js';
 import { Meter, MeterError } from './meter.js';
@@ -29,6 +29,15 @@ function showGraphView(view) {
   $('graphCount').textContent = data ? `${graph.length} points` : `${graph.length} samples`;
 }
 
+// The selection between the cursors, spelled out so it is clear what an export will contain.
+function showCursorInfo(info) {
+  $('cursorRow').hidden = !info;
+  if (!info) return;
+  const at = (ms, open) => (ms == null ? open : localTimestamp(ms).slice(info.spanMs > 86_400_000 ? 5 : 11, 19));
+  $('cursorInfo').textContent =
+    `Selection ${at(info.start, 'start')} – ${at(info.end, 'end')} · ${info.count} of ${info.total} points. Exports use only these.`;
+}
+
 const graph = new LiveGraph({
   scroll: $('graphScroll'),
   inner: $('graphInner'),
@@ -37,6 +46,7 @@ const graph = new LiveGraph({
     if (graph.view === 'live') $('live').disabled = following;
   },
   onViewChange: (view) => showGraphView(view),
+  onCursorChange: (info) => showCursorInfo(info),
   onRangeChange: (min, max, auto) => {
     $('yAuto').setAttribute('aria-pressed', String(auto));
     // Don't overwrite a limit while the user is typing it.
@@ -253,11 +263,8 @@ $('zoom').onchange = (e) => {
 $('live').onclick = () => (graph.view === 'data' ? graph.showLive() : graph.jumpToLive());
 $('viewLive').onclick = () => graph.showLive();
 $('viewData').onclick = () => graph.showData();
-$('clearGraph').onclick = () => {
-  graph.clear(); // in the downloaded view this drops that dataset and returns to live
-  showGraphView(graph.view);
-  $('graphCount').textContent = '';
-};
+$('clearGraph').onclick = clearGraph;
+$('cursorClear').onclick = () => graph.clearCursors();
 
 $('yAuto').onclick = () => graph.setYAuto();
 $('yIn').onclick = () => graph.zoomY(1 / 1.5);
@@ -328,7 +335,8 @@ function graphMessage(text) {
 function graphImage() {
   const canvas = graph.exportCanvas({
     title: $('graphTitle').textContent,
-    subtitle: [$('status').textContent.startsWith('FLUKE') ? $('status').textContent : '', new Date().toLocaleDateString()]
+    subtitle: [$('status').textContent.startsWith('FLUKE') ? $('status').textContent : '', new Date().toLocaleDateString(),
+      graph.hasCursors ? 'between the cursors' : '']
       .filter(Boolean)
       .join('  ·  '),
   });
@@ -336,7 +344,8 @@ function graphImage() {
   return canvas;
 }
 
-// Everything is exported from here, for whatever the graph shows (live or downloaded from the meter).
+// Everything is exported and copied from the graph's right-click menu, for whatever the graph shows
+// (live, or downloaded from the meter's memory).
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 const fileStem = () => `fluke287-${$('graphTitle').textContent.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48) || 'graph'}`;
 
@@ -351,71 +360,163 @@ function saveBlob(blob, filename) {
 function exportJpg() {
   graphImage()?.toBlob((blob) => {
     saveBlob(blob, `${fileStem()}-${stamp()}.jpg`);
-    graphMessage('Saved JPG');
+    graphMessage(`Saved JPG${graph.hasCursors ? ' (between the cursors)' : ''}`);
   }, 'image/jpeg', 0.92);
 }
 
 // Every point of what the graph shows (not just the visible part): time, value, and min/max or state when present.
 function exportCsv() {
-  const points = graph.allPoints();
+  const points = graph.selectedPoints(); // between the cursors when they are set, otherwise everything
   if (!points.length) return graphMessage('Nothing to export yet');
   const { header, rows } = pointsToTable(points, graph.unit);
   saveBlob(new Blob([toCsv(header, rows)], { type: 'text/csv' }), `${fileStem()}-${stamp()}.csv`);
-  graphMessage(`Saved CSV with ${points.length} points`);
+  graphMessage(`Saved CSV with ${points.length} points${graph.hasCursors ? ' (between the cursors)' : ''}`);
 }
-$('exportJpg').onclick = exportJpg;
-$('exportCsv').onclick = exportCsv;
-$('copyValues').onclick = () => copyValues(false);
 
 async function copyImage() {
   const canvas = graphImage();
   if (!canvas) return;
   try {
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png')); // the clipboard only takes PNG
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-    graphMessage('Copied to clipboard');
+    graphMessage(`Copied image to clipboard${graph.hasCursors ? ' (between the cursors)' : ''}`);
   } catch (e) {
     graphMessage(`Could not copy: ${e.message}`);
   }
 }
-$('copyGraph').onclick = copyImage;
 
 // x,y values as tab-separated text (time in local time, value in base units).
 async function copyValues(all) {
-  const points = all ? graph.allPoints() : graph.visiblePoints();
+  // `all` = everything, or the cursor selection when cursors are set. Otherwise the part on screen.
+  const points = all || graph.hasCursors ? graph.selectedPoints() : graph.visiblePoints();
   if (!points.length) return graphMessage('Nothing to copy yet');
   try {
     await navigator.clipboard.writeText(pointsToText(points, graph.unit));
-    graphMessage(`Copied ${points.length} x,y values`);
+    graphMessage(`Copied ${points.length} x,y values${graph.hasCursors ? ' (between the cursors)' : ''}`);
   } catch (e) {
     graphMessage(`Could not copy: ${e.message}`);
   }
 }
 
-// Right-click menu on the graph. Ctrl/Cmd+C with the graph focused copies the visible values too.
+function clearGraph() {
+  graph.clear(); // in the downloaded view this drops that dataset and returns to live
+  showGraphView(graph.view);
+  $('graphCount').textContent = '';
+}
+
+function fitAll() {
+  $('zoom').value = 'fit';
+  $('zoom').dispatchEvent(new Event('change'));
+}
+
+// The menu is built each time it opens, so counts and availability are current.
+function menuItems(timeHere) {
+  const total = graph.allPoints().length;
+  const visible = graph.visiblePoints().length;
+  const has = total > 0;
+  const cursors = graph.hasCursors;
+  const selected = graph.selectedPoints().length;
+  const pts = (n) => `${n} point${n === 1 ? '' : 's'}`;
+  const scope = cursors ? `${selected} of ${total} points` : pts(total); // what Export / Copy-all will contain
+  return [
+    { group: 'Export' },
+    { label: 'Export CSV', note: scope, enabled: selected > 0, run: exportCsv },
+    { label: 'Export JPG image', note: cursors ? 'between cursors' : 'visible area', enabled: selected > 0, run: exportJpg },
+    { group: 'Copy' },
+    // With cursors set, every export and copy follows the selection, so there is one values item, not two.
+    ...(cursors
+      ? [{ label: 'Copy selected x,y values', note: scope, enabled: selected > 0, run: () => copyValues(true) }]
+      : [
+        { label: 'Copy visible x,y values', note: pts(visible), enabled: visible > 0, run: () => copyValues(false) },
+        { label: 'Copy all x,y values', note: scope, enabled: has, run: () => copyValues(true) },
+      ]),
+    { label: 'Copy image', note: cursors ? 'between cursors' : 'visible area', enabled: selected > 0, run: copyImage },
+    { group: 'Cursors' },
+    { label: 'Place start cursor here', enabled: has && timeHere != null, run: () => graph.placeCursor('start', timeHere) },
+    { label: 'Place end cursor here', enabled: has && timeHere != null, run: () => graph.placeCursor('end', timeHere) },
+    cursors
+      ? { label: 'Remove cursors', enabled: true, run: () => graph.clearCursors() }
+      : { label: 'Add cursors', enabled: total > 1, run: () => graph.addCursors() },
+    { group: 'Graph' },
+    graph.view === 'data'
+      ? { label: 'Show live trace', enabled: true, run: () => graph.showLive() }
+      : { label: 'Jump to live', enabled: !graph.following, run: () => graph.jumpToLive() },
+    { label: 'Fit all in view', enabled: has, run: fitAll },
+    { label: 'Auto Y axis', enabled: !graph.autoY, run: () => graph.setYAuto() },
+    { label: 'Clear graph', enabled: true, run: clearGraph },
+  ];
+}
+
 const menu = $('graphMenu');
-const closeMenu = () => (menu.hidden = true);
+const closeMenu = () => {
+  menu.hidden = true;
+  menu.replaceChildren();
+};
+
+function openMenu(x, y, timeHere) {
+  menu.replaceChildren(...menuItems(timeHere).map((item) => {
+    if (item.group) {
+      const g = document.createElement('div');
+      g.className = 'group';
+      g.textContent = item.group;
+      g.setAttribute('role', 'presentation');
+      return g;
+    }
+    const b = document.createElement('button');
+    b.setAttribute('role', 'menuitem');
+    b.disabled = !item.enabled;
+    b.append(item.label);
+    if (item.note) {
+      const small = document.createElement('small');
+      small.textContent = item.note;
+      b.append(small);
+    }
+    b.onclick = () => {
+      closeMenu();
+      item.run();
+    };
+    return b;
+  }));
+  menu.hidden = false;
+  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - menu.offsetWidth - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - menu.offsetHeight - 8))}px`;
+  menu.querySelector('button:not(:disabled)')?.focus();
+}
+
 $('graphScroll').addEventListener('contextmenu', (e) => {
   e.preventDefault();
-  menu.hidden = false;
-  const x = Math.min(e.clientX, window.innerWidth - menu.offsetWidth - 8);
-  const y = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 8);
-  menu.style.left = `${Math.max(8, x)}px`;
-  menu.style.top = `${Math.max(8, y)}px`;
-  $('ctxCsv').focus();
+  // From the keyboard (Shift+F10 / menu key) the event has no position: open at the graph's top-left corner.
+  const box = $('graphScroll').getBoundingClientRect();
+  const fromMouse = Boolean(e.clientX);
+  // "Place a cursor here" uses the pointer position; from the keyboard, the middle of the graph.
+  openMenu(fromMouse ? e.clientX : box.left + 24, fromMouse ? e.clientY : box.top + 24,
+    graph.timeAtClientX(fromMouse ? e.clientX : box.left + box.width / 2));
 });
-$('ctxCsv').onclick = () => (closeMenu(), exportCsv());
-$('ctxJpg').onclick = () => (closeMenu(), exportJpg());
-$('ctxVisible').onclick = () => (closeMenu(), copyValues(false));
-$('ctxAll').onclick = () => (closeMenu(), copyValues(true));
-$('ctxImage').onclick = () => (closeMenu(), copyImage());
+
+// Arrow keys move through the enabled items; Escape and Tab close the menu.
+menu.addEventListener('keydown', (e) => {
+  const items = [...menu.querySelectorAll('button:not(:disabled)')];
+  const at = items.indexOf(document.activeElement);
+  const go = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key];
+  if (go !== undefined) {
+    e.preventDefault();
+    items[(go + items.length) % items.length]?.focus();
+  } else if (e.key === 'Escape' || e.key === 'Tab') {
+    e.preventDefault();
+    closeMenu();
+    $('graphScroll').focus();
+  }
+});
 document.addEventListener('pointerdown', (e) => menu.contains(e.target) || closeMenu());
-document.addEventListener('keydown', (e) => e.key === 'Escape' && closeMenu());
 window.addEventListener('blur', closeMenu);
 window.addEventListener('resize', closeMenu);
-window.addEventListener('scroll', closeMenu, true);
+// Only the page scrolling closes the menu. The graph scrolls itself on every new live sample (capture would see
+// that too), which used to dismiss the menu a moment after it opened.
+window.addEventListener('scroll', (e) => e.target === document && closeMenu(), true);
+
+// Ctrl/Cmd+C with the graph focused copies the visible values too.
 $('graphScroll').addEventListener('copy', (e) => {
-  const points = graph.visiblePoints();
+  const points = graph.hasCursors ? graph.selectedPoints() : graph.visiblePoints();
   if (!points.length) return;
   e.preventDefault();
   e.clipboardData.setData('text/plain', pointsToText(points, graph.unit));

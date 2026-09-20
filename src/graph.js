@@ -4,10 +4,13 @@
 // viewport-sized and sticky, and redraws just the visible time window. That keeps the canvas small however
 // long the history grows.
 
+import { pointsBetween } from './graph-text.js';
+
 const AXIS_W = 64;
 const PAD_T = 14;
 const PAD_B = 24;
 const PAD_R = 16;
+const CURSOR_HIT = 8; // px either side of a cursor line that grabs it
 const MAX_POINTS = 36000; // 5 h at 2 samples/s
 const TIME_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600, 7200, 21600, 43200, 86400, 172800, 604800];
 const PREFIXES = [[-9, 'n'], [-6, 'µ'], [-3, 'm'], [0, ''], [3, 'k'], [6, 'M']];
@@ -60,18 +63,22 @@ export class LiveGraph {
   #follow = true;
   #liveScroll = 0;
   #onView;
+  #liveCursors = null; // { start, end } in ms; null = not set on that side. Each dataset has its own pair
+  #onCursor;
+  #lastCursorInfo = '';
   #colors;
   #manualY = null; // { min, max } in base units, or null for auto-scale
   #shownY = { min: -1, max: 1 }; // range used by the last draw
   #onRange;
 
-  constructor({ scroll, inner, canvas, onFollowChange = () => {}, onRangeChange = () => {}, onViewChange = () => {} }) {
+  constructor({ scroll, inner, canvas, onFollowChange = () => {}, onRangeChange = () => {}, onViewChange = () => {}, onCursorChange = () => {} }) {
     this.#scroll = scroll;
     this.#inner = inner;
     this.#canvas = canvas;
     this.#onFollow = onFollowChange;
     this.#onRange = onRangeChange;
     this.#onView = onViewChange;
+    this.#onCursor = onCursorChange;
     this.#enableDragPan();
     this.#readColors();
     scroll.addEventListener('scroll', () => {
@@ -100,6 +107,15 @@ export class LiveGraph {
 
   get #unit() {
     return this.#view === 'live' ? this.#liveUnit : this.#data.unit;
+  }
+
+  get #cursors() {
+    return this.#view === 'live' ? this.#liveCursors : this.#data.cursors;
+  }
+
+  set #cursors(value) {
+    if (this.#view === 'live') this.#liveCursors = value;
+    else this.#data.cursors = value;
   }
 
   get view() {
@@ -133,7 +149,7 @@ export class LiveGraph {
 
   // Shows a downloaded dataset instead of the live trace; the live buffer keeps filling in the background.
   setData({ points, unit, style = 'line' }) {
-    this.#data = { points: [...points].sort((a, b) => a.t - b.t), unit, style };
+    this.#data = { points: [...points].sort((a, b) => a.t - b.t), unit, style, cursors: null };
     this.#enterData();
   }
 
@@ -155,6 +171,7 @@ export class LiveGraph {
     this.#scroll.scrollLeft = 0;
     this.#layout();
     this.#onView('data');
+    this.#notifyCursors();
   }
 
   showLive() {
@@ -167,6 +184,7 @@ export class LiveGraph {
     this.#onFollow(true);
     this.#layout();
     this.#onView('live');
+    this.#notifyCursors();
   }
 
   clearData() {
@@ -180,6 +198,7 @@ export class LiveGraph {
     const get = (n, fallback) => s.getPropertyValue(n).trim() || fallback;
     this.#colors = {
       band: 'rgba(63, 209, 199, .16)',
+      cursor: get('--amber', '#f0b429'),
       line: get('--trace', '#3fd1c7'),
       grid: get('--border', '#1c242c'),
       axis: get('--muted2', '#5b6670'),
@@ -193,10 +212,14 @@ export class LiveGraph {
     if (unit !== this.#liveUnit) {
       this.#live = [];
       this.#liveUnit = unit;
+      this.#liveCursors = null;
     }
     this.#live.push({ t, v: value, state });
     if (this.#live.length > MAX_POINTS) this.#trim(MAX_POINTS / 10);
-    if (this.#view === 'live') this.#layout();
+    if (this.#view === 'live') {
+      this.#layout();
+      if (this.#liveCursors) this.#notifyCursors(); // the selected count grows as samples arrive
+    }
   }
 
   #trim(count) {
@@ -214,8 +237,10 @@ export class LiveGraph {
     if (this.#view === 'data') return this.clearData();
     this.#live = [];
     this.#liveUnit = '';
+    this.#liveCursors = null;
     this.#manualY = null;
     this.#layout();
+    this.#notifyCursors();
   }
 
   get autoY() {
@@ -245,18 +270,120 @@ export class LiveGraph {
     this.setYRange(mid - half, mid + half);
   }
 
-  // Dragging the plot up/down pans the value axis (mouse/pen; touch keeps scrolling the page).
+  // ---- x-axis cursors: two draggable vertical lines; exports use only the samples between them ----
+
+  #xAt(t) {
+    return AXIS_W + ((t - this.#points[0].t) / 1000) * this.#pps - this.#scroll.scrollLeft;
+  }
+
+  #tAt(x) {
+    return this.#points[0].t + ((x - AXIS_W + this.#scroll.scrollLeft) / this.#pps) * 1000;
+  }
+
+  #clampToData(t) {
+    const pts = this.#points;
+    return Math.min(Math.max(t, pts[0].t), pts[pts.length - 1].t);
+  }
+
+  // The time under a screen x (clamped to the data), for "place a cursor here".
+  timeAtClientX(clientX) {
+    if (!this.#points.length) return null;
+    return this.#clampToData(this.#tAt(clientX - this.#canvas.getBoundingClientRect().left));
+  }
+
+  get hasCursors() {
+    return this.#points.length > 0 && this.#cursors !== null;
+  }
+
+  // Two cursors a quarter and three quarters across what is on screen.
+  addCursors() {
+    const pts = this.#points;
+    if (pts.length < 2) return;
+    const plotW = this.#scroll.clientWidth - AXIS_W - PAD_R;
+    const lo = Math.max(this.#tAt(AXIS_W), pts[0].t);
+    const hi = Math.min(this.#tAt(AXIS_W + plotW), pts[pts.length - 1].t);
+    const [a, b] = hi > lo ? [lo, hi] : [pts[0].t, pts[pts.length - 1].t];
+    this.#cursors = { start: a + (b - a) * 0.25, end: a + (b - a) * 0.75 };
+    this.#cursorsChanged();
+  }
+
+  // which: 'start' | 'end'. The cursors never cross.
+  placeCursor(which, t) {
+    if (!this.#points.length) return;
+    const cur = this.#cursors ?? { start: null, end: null };
+    const time = this.#clampToData(t);
+    if (which === 'start') cur.start = cur.end == null ? time : Math.min(time, cur.end);
+    else cur.end = cur.start == null ? time : Math.max(time, cur.start);
+    this.#cursors = cur;
+    this.#cursorsChanged();
+  }
+
+  clearCursors() {
+    this.#cursors = null;
+    this.#cursorsChanged();
+  }
+
+  // The samples between the cursors, or all of them when no cursors are set.
+  selectedPoints() {
+    const cur = this.#points.length ? this.#cursors : null;
+    return pointsBetween(this.#points, cur?.start, cur?.end).map((p) => ({ ...p }));
+  }
+
+  #cursorsChanged() {
+    this.#draw();
+    this.#notifyCursors();
+  }
+
+  #notifyCursors() {
+    const cur = this.#points.length ? this.#cursors : null;
+    const pts = this.#points;
+    const info = cur && {
+      start: cur.start,
+      end: cur.end,
+      count: pointsBetween(pts, cur.start, cur.end).length,
+      total: pts.length,
+      spanMs: (cur.end ?? pts[pts.length - 1].t) - (cur.start ?? pts[0].t),
+    };
+    const key = JSON.stringify(info);
+    if (key === this.#lastCursorInfo) return;
+    this.#lastCursorInfo = key;
+    this.#onCursor(info);
+  }
+
+  // Which cursor line is under this screen x, if any.
+  #cursorAt(clientX) {
+    const cur = this.#points.length ? this.#cursors : null;
+    if (!cur) return null;
+    const x = clientX - this.#canvas.getBoundingClientRect().left;
+    let best = null;
+    for (const which of ['start', 'end']) {
+      if (cur[which] == null) continue;
+      const d = Math.abs(this.#xAt(cur[which]) - x);
+      if (d <= CURSOR_HIT && (best === null || d < best.d)) best = { which, d };
+    }
+    return best?.which ?? null;
+  }
+
+  // Dragging the plot pans the value axis (mouse/pen; touch keeps scrolling the page), unless the pointer grabs a cursor.
   #enableDragPan() {
     const canvas = this.#canvas;
     let drag = null;
     canvas.style.cursor = 'ns-resize';
     canvas.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'touch' || e.button !== 0) return;
-      drag = { y: e.clientY, ...this.#shownY };
+      const cursor = this.#cursorAt(e.clientX);
+      drag = cursor ? { cursor } : { y: e.clientY, ...this.#shownY };
       canvas.setPointerCapture(e.pointerId);
     });
     canvas.addEventListener('pointermove', (e) => {
-      if (!drag) return;
+      if (!drag) {
+        canvas.style.cursor = this.#cursorAt(e.clientX) ? 'ew-resize' : 'ns-resize';
+        return;
+      }
+      if (drag.cursor) {
+        this.placeCursor(drag.cursor, this.#tAt(e.clientX - canvas.getBoundingClientRect().left));
+        return;
+      }
       const plotH = canvas.clientHeight - PAD_T - PAD_B;
       const perPx = (drag.max - drag.min) / plotH;
       const shift = (e.clientY - drag.y) * perPx; // dragging down reveals higher values
@@ -335,7 +462,8 @@ export class LiveGraph {
 
   // Paints the current view into `g` (already scaled to CSS pixels). Returns the visible time span in ms,
   // or null when there is nothing to show. `notify` reports the Y range to the page (screen draws only).
-  #paint(g, W, H, c, notify) {
+  // `view` ({ pps, left }) overrides the on-screen zoom and scroll, so an export can render any time window.
+  #paint(g, W, H, c, notify, view = null) {
     g.font = '11px ui-monospace, Menlo, Consolas, monospace';
 
     const pts = this.#points;
@@ -348,9 +476,10 @@ export class LiveGraph {
     }
 
     const t0 = pts[0].t;
-    const left = this.#scroll.scrollLeft;
-    const xAt = (t) => plotL + ((t - t0) / 1000) * this.#pps - left;
-    const tAt = (x) => t0 + ((x - plotL + left) / this.#pps) * 1000;
+    const left = view ? view.left : this.#scroll.scrollLeft;
+    const pps = view ? view.pps : this.#pps;
+    const xAt = (t) => plotL + ((t - t0) / 1000) * pps - left;
+    const tAt = (x) => t0 + ((x - plotL + left) / pps) * 1000;
 
     // Visible slice, with one point of margin either side so the line runs off the edges.
     const tMin = tAt(plotL), tMax = tAt(plotR);
@@ -411,7 +540,7 @@ export class LiveGraph {
     g.fillText(prefix + this.#unit, 6, 2);
 
     // Time grid + labels
-    const secPerLabel = TIME_STEPS.find((s) => s * this.#pps >= 90) ?? TIME_STEPS.at(-1);
+    const secPerLabel = TIME_STEPS.find((s) => s * pps >= 90) ?? TIME_STEPS.at(-1);
     g.textAlign = 'center';
     g.textBaseline = 'alphabetic';
     for (let s = Math.ceil(tMin / 1000 / secPerLabel) * secPerLabel; s * 1000 <= tMax; s += secPerLabel) {
@@ -422,7 +551,10 @@ export class LiveGraph {
       g.lineTo(x, plotB);
       g.stroke();
       g.fillStyle = c.axis;
-      g.fillText(stamp(s * 1000, secPerLabel), x, H - 6);
+      // Keep the label inside the canvas: a tick at the very edge would otherwise be cut in half.
+      const label = stamp(s * 1000, secPerLabel);
+      const half = g.measureText(label).width / 2;
+      g.fillText(label, Math.min(Math.max(x, half + 2), W - half - 2), H - 6);
     }
 
     // Axes
@@ -492,11 +624,19 @@ export class LiveGraph {
       g.fill();
     }
     g.restore();
+    if (notify) this.#paintCursors(g, { plotL, plotR, plotT, plotB, xAt, span: (tMax - tMin) / 1000 }, c);
     return { tMin, tMax };
   }
 
-  // Renders what is on screen as a print-friendly image (white background, title strip on top).
-  // Returns a canvas, or null when there is no data yet.
+  // The time window between the cursors (an unset side is the data's edge), or null when no cursors are set.
+  cursorRange() {
+    const pts = this.#points;
+    const cur = pts.length ? this.#cursors : null;
+    return cur && { start: cur.start ?? pts[0].t, end: cur.end ?? pts[pts.length - 1].t };
+  }
+
+  // Renders a print-friendly image (white background, title strip on top): the window between the cursors when
+  // they are set, otherwise what is on screen. Returns a canvas, or null when there is no data yet.
   exportCanvas({ title = '', subtitle = '', scale = 2 } = {}) {
     const W = this.#scroll.clientWidth;
     const H = this.#inner.clientHeight;
@@ -512,7 +652,14 @@ export class LiveGraph {
 
     g.save();
     g.translate(0, HEAD);
-    const span = this.#paint(g, W, H, PRINT_COLORS, false);
+    // Fit the cursor window across the whole plot width, whatever the on-screen zoom and scroll are.
+    const sel = this.cursorRange();
+    let view = null;
+    if (sel && sel.end > sel.start) {
+      const pps = (W - AXIS_W - PAD_R) / ((sel.end - sel.start) / 1000);
+      view = { pps, left: ((sel.start - this.#points[0].t) / 1000) * pps };
+    }
+    const span = this.#paint(g, W, H, PRINT_COLORS, false, view);
     g.restore();
 
     g.textBaseline = 'alphabetic';
@@ -525,6 +672,41 @@ export class LiveGraph {
     const range = span ? `${clock(span.tMin)} – ${clock(span.tMax)}` : '';
     g.fillText([subtitle, range].filter(Boolean).join('  ·  '), 12, 39);
     return out;
+  }
+
+  // Dims what lies outside the cursors and draws the cursor lines with their times.
+  #paintCursors(g, { plotL, plotR, plotT, plotB, xAt }, c) {
+    const cur = this.#cursors;
+    if (!cur) return;
+    const clampX = (x) => Math.min(Math.max(x, plotL), plotR);
+    g.save();
+    g.fillStyle = 'rgba(10, 14, 18, .55)';
+    if (cur.start != null) g.fillRect(plotL, plotT, clampX(xAt(cur.start)) - plotL, plotB - plotT);
+    if (cur.end != null) g.fillRect(clampX(xAt(cur.end)), plotT, plotR - clampX(xAt(cur.end)), plotB - plotT);
+    g.font = '11px ui-monospace, Menlo, Consolas, monospace';
+    g.textBaseline = 'top';
+    for (const which of ['start', 'end']) {
+      if (cur[which] == null) continue;
+      const x = Math.round(xAt(cur[which])) + 0.5;
+      if (x < plotL - 1 || x > plotR + 1) continue;
+      g.strokeStyle = c.cursor;
+      g.fillStyle = c.cursor;
+      g.lineWidth = 1.5;
+      g.setLineDash([5, 4]);
+      g.beginPath();
+      g.moveTo(x, plotT);
+      g.lineTo(x, plotB);
+      g.stroke();
+      g.setLineDash([]);
+      // Handle: a small tab at the top, with the time beside it (inside the plot, away from the edge).
+      g.fillRect(x - 4, plotT - 2, 8, 9);
+      const text = clock(cur[which]);
+      const w = g.measureText(text).width;
+      const onLeft = which === 'end' && x - w - 10 > plotL;
+      g.textAlign = onLeft ? 'right' : 'left';
+      g.fillText(text, onLeft ? x - 8 : x + 8, plotT + 1);
+    }
+    g.restore();
   }
 
   #firstAtOrAfter(t) {

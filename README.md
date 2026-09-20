@@ -13,11 +13,13 @@ npm test           # protocol parser + mock-meter tests, no dependencies
 Open the page in **Chrome, Edge or Opera** (macOS, Windows, Linux). Web Serial is not available in Firefox or Safari.
 The page must be served from `https://` or `http://localhost`.
 
-To publish, build one self-contained file and upload it next to your site's `site-nav.js` and `images/logo.png`:
+The ready-to-upload page is [`dist/Fluke287.html`](dist/Fluke287.html): one self-contained file with all modules and
+the Fluke logo inlined. Put it next to your site's `site-nav.js` and `images/logo.png` (header, logo, menu). It is
+committed, so rebuild it after changing anything in `src/` or `index.html`:
 
 ```sh
-node scripts/build.mjs          # writes dist/Fluke287.html (modules and Fluke logo inlined)
-scripts/sync-website.sh /path/to/website   # builds and copies it into a local website folder
+node scripts/build.mjs                     # regenerates dist/Fluke287.html
+scripts/sync-website.sh /path/to/website   # optional: builds and copies it into a local website folder
 ```
 
 ## Status

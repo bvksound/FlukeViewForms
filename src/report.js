@@ -193,7 +193,7 @@ export function buildReportPdf({ template, data, now = new Date() }) {
   // ---- instrument: one quiet line
   if (t.blocks.meter && data.meter) {
     const m = data.meter;
-    const parts = [m.model, m.serial && `serial ${m.serial}`, m.firmware && `firmware ${m.firmware}`, m.owner?.company, m.owner?.site, m.owner?.operator]
+    const parts = [m.model, m.serial && `serial ${m.serial}`, m.firmware && `firmware ${m.firmware}`, m.calibrationCounter != null && `calibration counter ${m.calibrationCounter}`, m.calibrationVersion && `calibration version ${m.calibrationVersion}`, m.owner?.company, m.owner?.site, m.owner?.operator]
       .filter(Boolean);
     const lines = wrapText(`Instrument: ${parts.join('  ·  ')}`, W, 8.5);
     need(lines.length * 11 + 6);

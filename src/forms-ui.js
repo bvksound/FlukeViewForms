@@ -260,7 +260,7 @@ export function initForms({ store, getData, getMeter, els }) {
     if (!instrumentNode) return;
     const m = getMeter();
     instrumentNode.textContent = template.blocks.meter && m
-      ? `Instrument: ${[m.model, m.serial && `serial ${m.serial}`, m.firmware && `firmware ${m.firmware}`, m.owner?.company, m.owner?.site, m.owner?.operator].filter(Boolean).join('  ·  ')}`
+      ? `Instrument: ${[m.model, m.serial && `serial ${m.serial}`, m.firmware && `firmware ${m.firmware}`, m.calibrationCounter != null && `calibration counter ${m.calibrationCounter}`, m.calibrationVersion && `calibration version ${m.calibrationVersion}`, m.owner?.company, m.owner?.site, m.owner?.operator].filter(Boolean).join('  ·  ')}`
       : '';
   }
 

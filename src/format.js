@@ -90,6 +90,13 @@ export function batteryBlocks(code) {
   return m ? Math.min(Number(m[1]), BATTERY_BLOCKS - 1) : null;
 }
 
+// Colour of the battery symbol: red with one bar left (or none), orange with two, green with three or four.
+// null for wording we don't recognise, so it keeps the neutral colour.
+export function batteryLevel(bars) {
+  if (bars == null) return null;
+  return bars <= 1 ? 'red' : bars === 2 ? 'orange' : 'green';
+}
+
 // Which of the four bars are lit. The meter's symbol empties from the terminal (left) side, so the lit bars are the last ones.
 export function batteryBars(filled) {
   return Array.from({ length: BATTERY_BLOCKS }, (_, i) => i >= BATTERY_BLOCKS - filled);

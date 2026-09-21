@@ -1,4 +1,4 @@
-import { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
+import { batteryBars, batteryBlocks, batteryLevel, formatBattery, formatEng, formatReading, parseEng, prettyFunction, unitSymbol } from './format.js';
 import { LiveGraph } from './graph.js';
 import { localTimestamp, pointsToTable, pointsToText } from './graph-text.js';
 import { toCsv } from './csv.js';
@@ -16,6 +16,7 @@ const $ = (id) => document.getElementById(id);
 let meter = null;
 let polling = false;
 let failures = 0;
+let connectedLabel = ''; // what the status shows while all is well, restored after a "No reply" warning
 
 let dataTitle = '';
 let liveZoom = '40';
@@ -122,7 +123,8 @@ async function connect({ choose = false } = {}) {
       meter = candidate;
       failures = 0;
       graph.clear();
-      setStatus(`${id.model} · ${id.firmware} · S/N ${id.serial}`, 'ok');
+      connectedLabel = `${id.model} · ${id.firmware} · S/N ${id.serial}`;
+      setStatus(connectedLabel, 'ok');
       setConnected(true);
       poll();
       settings.load();
@@ -153,7 +155,30 @@ async function loadMeterInfo(id, m) {
     } catch {
       break; // an older meter without these: the report just leaves them out
     }
+  }  try {
+    meterInfo.calibrationCounter = await m.queryCalibrationCounter();
+    meterInfo.calibrationVersion = await m.queryCalibrationVersion();
+  } catch {
+    /* a meter without them: left out */
   }
+  showMeterInfo();
+}
+
+// Read-only facts about the meter, at the top of Settings > Meter.
+function showMeterInfo() {
+  const i = meterInfo;
+  const rows = i ? [['Model', i.model], ['Serial number', i.serial], ['Firmware', i.firmware], ['Calibration counter', i.calibrationCounter != null ? String(i.calibrationCounter) : 'not available'], ['Calibration version', i.calibrationVersion || 'not available']] : [];
+  $('setInfo').replaceChildren(...rows.map(([label, value]) => {
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    const l = document.createElement('label');
+    l.textContent = label;
+    const v = document.createElement('span');
+    v.className = 'set-value';
+    v.textContent = value;
+    row.append(l, v, document.createElement('span'));
+    return row;
+  }));
 }
 
 async function disconnect(message = 'Not connected', kind = '') {
@@ -201,7 +226,7 @@ async function updateBattery() {
     const bars = batteryBlocks(code);
     const el = $('battery');
     el.hidden = false;
-    el.classList.toggle('low', bars === 0);
+    el.dataset.level = batteryLevel(bars) ?? '';
     el.title = `Battery: ${formatBattery(code)}${bars === null ? '' : ` (${bars} of 4 bars)`}`;
     el.setAttribute('aria-label', el.title);
     el.replaceChildren(bars === null ? `Battery: ${formatBattery(code)}` : batteryIcon(bars));
@@ -223,6 +248,7 @@ async function poll() {
     const started = performance.now();
     try {
       render(await meter.queryDisplay());
+      if (failures) setStatus(connectedLabel, 'ok'); // the meter answers again: clear the "No reply" warning
       if (batterySupported && Date.now() - batteryChecked > BATTERY_EVERY_MS) await updateBattery();
       failures = 0;
     } catch (e) {

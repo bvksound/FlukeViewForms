@@ -55,8 +55,8 @@ command (18,277 probes, only `Q` commands were sent), and the open-source projec
 | `QMR` | `50,-3` | Current range number and unit multiplier |
 | `QMM` | `0` | Active modes (none) |
 | `QSN` | `14560135` | Serial number |
-| `QCVN` | `V0.14` | A version string, not the `ID` firmware version. Purpose unknown |
-| `QCCV` | `4` | Unknown, possibly a version or revision |
+| `QCVN` | `V0.14` | **Calibration version**: confirmed, the Meter Info screen shows "calibration version 0.14" (read-only; used by the app) |
+| `QCCV` | `4` | **Calibration counter**: confirmed, the meter's Meter Info screen also showed 4 (read-only; used by the app) |
 | `QDDB` | binary | Binary form of `QDDA` |
 | `QSLS` | `0,0,0,0` | Storage summary: number of recordings, min/max, peak and saved measurements (all empty here) |
 | `QSUS` | `DISABLED` | Unknown |
@@ -153,6 +153,14 @@ attribute u16, time f64 (seconds, meter's local wall-clock time as if UTC).
 | `QMMSI n`, `QPSI n` | 54-byte header (seq @0, start f64 @4, end f64 @12, functions @20/@22, range @24, unit @26, range max @28, multiplier @36, bolt @38, mode @48, reading count @52), readings, name |
 | `QRSI n` | 78-byte header (start @4, end @12, sample interval f64 @20, event threshold f64 @28, reading index @36, sample count @40, functions @44/@46, range @48, unit @50, range max @52, multiplier @60, bolt @62, mode @72, reading count @76), readings, name |
 | `QSRR r,s` | Exactly 146 bytes: start f64 @0, end f64 @8, three readings @16 (max, average, min), reading count u16 @106, primary reading @110, record type @140, stable flag @142, transient state @144. `r` is the recording's reading index, `s` the 0-based sample. **The stored average is the sum of the interval's readings: divide by the count @106** (checked on a real recording: sums exceeded the interval maximum until divided) |
+
+## Shown on the meter's Meter Info screen, not yet found as commands
+
+The 287's Meter Info screen (Setup) shows: serial number, model, firmware `1.16 / V0.88`, calibration date, calibration
+counter `4`, and board id `3` (values from our meter). `ID`, `QSN`, `QCCV` and `QCVN` cover the serial number, firmware 1.16,
+the calibration counter and the calibration version (0.14). The screen also lists an ARM bootloader (2.0.74). Still
+unmatched: the second firmware version (V0.88), the ARM bootloader version, the board id (3) and the calibration date. The `Q`
+scan (up to three letters after Q) did not turn them up, so they use longer names or are `QMP` properties.
 
 ## Still unknown
 

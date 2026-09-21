@@ -18,6 +18,7 @@
     --teal:#3fd1c7;
     --green:#35d07f;
     --amber:#f0b429;
+    --orange:#f5923e;
     --red:#ef5a6f;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -103,7 +104,9 @@
   #func{color:var(--teal);font-weight:600;}
   .battery{text-transform:none;letter-spacing:.04em;font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:8px;}
   .battery svg{width:34px;height:16px;display:block;}
-  .battery.low{color:var(--red);}
+  .battery[data-level="red"]{color:var(--red);}
+  .battery[data-level="orange"]{color:var(--orange);}
+  .battery[data-level="green"]{color:var(--green);}
   .readout{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:14px 0 4px;}
   #value{
     font:700 clamp(52px,13vw,104px)/1 var(--mono);color:var(--teal);
@@ -497,7 +500,8 @@
             <p class="hint offline-note">Connect a meter to read and change its settings.</p>
             <div class="meter-only">
               <div class="controls" style="margin-top:0"><button id="settingsReload" class="btn btn-ghost btn-sm">Read again</button></div>
-              <h4 class="sub">Clock &amp; display</h4><div id="setDisplay" class="set-grid"></div>
+              <h4 class="sub">Meter info</h4><div id="setInfo" class="set-grid"></div>
+            <h4 class="sub">Clock &amp; display</h4><div id="setDisplay" class="set-grid"></div>
               <h4 class="sub">Power &amp; sound</h4><div id="setPower" class="set-grid"></div>
               <h4 class="sub">Measurement</h4><div id="setMeasure" class="set-grid"></div>
             </div>

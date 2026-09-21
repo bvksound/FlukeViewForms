@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { batteryBars, batteryBlocks, formatBattery, formatEng, formatReading, parseEng, prettyFunction } from '../src/format.js';
+import { batteryBars, batteryBlocks, batteryLevel, formatBattery, formatEng, formatReading, parseEng, prettyFunction } from '../src/format.js';
 import { Meter, MeterError } from '../src/meter.js';
 import { MockTransport } from './mock-meter.js';
 import { ProtocolError, parseAck, parseId, parseQdda, parseQm } from '../src/protocol.js';
@@ -149,6 +149,8 @@ test('Meter talks to the mock meter', async () => {
   assert.equal((await meter.queryMeasurement()).unit, 'VDC');
   assert.equal((await meter.queryDisplay()).primaryFunction, 'V_DC');
   assert.equal(await meter.queryBattery(), 'PARTLY_EMPTY_2');
+  assert.equal(await meter.queryCalibrationCounter(), 4);
+  assert.equal(await meter.queryCalibrationVersion(), 'V0.14');
   await assert.rejects(meter.command('BOGUS'), MeterError);
   // Concurrent commands are serialized rather than interleaved.
   const [a, b] = await Promise.all([meter.queryDisplay(), meter.queryMeasurement()]);
@@ -274,4 +276,12 @@ test('pointsBetween keeps only samples between the cursors (inclusive); null mea
   assert.deepEqual(pointsBetween(pts, null, 25).map((p) => p.t), [10, 20]);
   assert.deepEqual(pointsBetween(pts, null, null).length, 5);
   assert.deepEqual(pointsBetween(pts, 41, 49), []);
+});
+
+test('battery colour: red at one bar (or none), orange at two, green at three or four', () => {
+  assert.deepEqual([0, 1, 2, 3, 4].map(batteryLevel), ['red', 'red', 'orange', 'green', 'green']);
+  assert.equal(batteryLevel(null), null);
+  assert.equal(batteryLevel(batteryBlocks('PARTLY_EMPTY_2')), 'orange'); // the state of the meter this was built on
+  assert.equal(batteryLevel(batteryBlocks('FULL')), 'green');
+  assert.equal(batteryLevel(batteryBlocks('EMPTY')), 'red');
 });

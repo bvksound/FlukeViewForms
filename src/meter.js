@@ -80,6 +80,18 @@ export class Meter {
   }
 
   // Battery level as the meter words it, e.g. "PARTLY_EMPTY_2". Undocumented; found by scanning a 287 (V1.16).
+  // The calibration counter (how many times the meter has been calibrated), as the Meter Info screen shows it.
+  // Undocumented; confirmed against a 287 that displayed the same number. null if the meter does not answer with one.
+  async queryCalibrationCounter() {
+    const value = (await this.command('QCCV')).trim();
+    return /^\d+$/.test(value) ? Number(value) : null;
+  }
+
+  // The calibration data version, e.g. "V0.14". Undocumented; confirmed against the Meter Info screen ("calibration version 0.14").
+  async queryCalibrationVersion() {
+    return (await this.command('QCVN')).trim();
+  }
+
   async queryBattery() {
     return (await this.command('QBL')).trim();
   }

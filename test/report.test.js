@@ -100,7 +100,7 @@ test('TemplateStore keeps working in memory when storage is blocked, and says so
 });
 
 const points = (n) => Array.from({ length: n }, (_, i) => ({ t: new Date(2026, 8, 20, 14, 0, i).getTime(), v: 3 + Math.sin(i / 8), state: 'NORMAL' }));
-const meter = { model: 'FLUKE 287', firmware: 'V1.16', serial: '14560135', owner: { company: 'ACME', site: 'Lab', operator: 'Sam', contact: '' } };
+const meter = { model: 'FLUKE 287', firmware: 'V1.16', serial: '14560135', calibrationCounter: 4, calibrationVersion: 'V0.14', owner: { company: 'ACME', site: 'Lab', operator: 'Sam', contact: '' } };
 
 test('a report is a valid PDF with header, fields, instrument, graph, summary and footer', () => {
   const template = { ...defaultTemplate(), extraLogo: LOGO_DATA_URL };
@@ -108,7 +108,7 @@ test('a report is a valid PDF with header, fields, instrument, graph, summary an
   const bytes = buildReportPdf({ template, data: { meter, elements: [{ type: 'graph', title: 'mV DC over time', unit: 'V', points: points(30), total: 30, selection: false, image: GRAPH_JPEG }] }, now: new Date(2026, 8, 20, 15, 30) });
   const text = latin1(bytes);
   assert.ok(text.startsWith('%PDF-1.4') && text.trimEnd().endsWith('%%EOF'));
-  for (const expected of ['(Measurement report)', '(Contoso)', '(mV DC over time)', '(Page 1 of 1)', '(Fluke 287 Data Logger   Generated 2026-09-20 15:30)']) {
+  for (const expected of ['(Measurement report)', '(Contoso)', '(mV DC over time)', 'calibration counter 4', 'calibration version V0.14', '(Page 1 of 1)', '(Fluke 287 Data Logger   Generated 2026-09-20 15:30)']) {
     assert.ok(text.includes(expected), `missing ${expected}`);
   }
   assert.ok(text.includes('(BVKsound \\227 Professional Audio \\267 Embedded Systems \\267 Acoustic Measurement)'), 'the fixed footer');

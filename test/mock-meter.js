@@ -52,6 +52,8 @@ export class MockTransport {
       if (i !== undefined) this.saveNames[Number(i)] = name;
       reply(i !== undefined ? '0' : '1');
     } else if (cmd === 'QBL') reply('0', 'PARTLY_EMPTY_2');
+    else if (cmd === 'QCCV') reply('0', '4');
+    else if (cmd === 'QCVN') reply('0', 'V0.14');
     else if (cmd === 'QM') {
       const v = this.#value();
       reply('0', `${v.toExponential(4).toUpperCase()},VDC,NORMAL,NONE`);

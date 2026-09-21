@@ -480,6 +480,7 @@
             <button id="repExport" class="btn btn-primary btn-sm">Export PDF</button>
             <button id="repPreview" class="btn btn-ghost btn-sm" title="Build the PDF and open it in a new tab">Open PDF in a new tab</button>
             <button id="repCopy" class="btn btn-ghost btn-sm" title="Adds the graph as it is now (with its cursors) to the report; do it again for more graphs">Copy graph to report</button>
+            <button id="repTable" class="btn btn-ghost btn-sm" title="Adds the Saved readings table to the report; do it again to add a newer copy">Copy table to report</button>
             <button id="repReset" class="btn btn-ghost btn-sm" title="Back to the built-in page">Reset page</button>
             <span id="repMsg" class="hint" role="status"></span>
           </div>
@@ -2660,6 +2661,7 @@ function initForms({ store, getData, getMeter, els }) {
     copyGraph,
     // Adds a copy of the Saved readings table to the report.
     addTable(rows) {
+      if (!rows.length) return say('There are no saved readings yet. Use Save reading in the Live Reading section first.', true);
       if (elements.length >= MAX_ELEMENTS) return say(`A report holds at most ${MAX_ELEMENTS} elements.`, true);
       elements.push({ id: nextId++, type: 'table', description: '', rows: rows.map((r) => ({ ...r })) });
       renderElements();
@@ -3568,6 +3570,8 @@ function initReadings({ store, getReading, onCopy, els }) {
       els.saveButton.disabled = !getReading();
     },
     add,
+    // A copy of the saved rows, for the report.
+    rows: () => store.rows.map((r) => ({ ...r })),
   };
 }
 
@@ -4728,6 +4732,8 @@ const readings = initReadings({
     csvButton: $('readingsCsv'), clearButton: $('readingsClear'), message: $('readingsMsg'),
   },
 });
+$('repTable').onclick = () => forms.addTable(readings.rows());
+
 // The Save reading button and the report's instrument line follow the meter.
 setInterval(() => {
   readings.refresh();

@@ -95,5 +95,7 @@ export function initReadings({ store, getReading, onCopy, els }) {
       els.saveButton.disabled = !getReading();
     },
     add,
+    // A copy of the saved rows, for the report.
+    rows: () => store.rows.map((r) => ({ ...r })),
   };
 }

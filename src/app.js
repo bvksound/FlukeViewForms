@@ -621,6 +621,8 @@ const readings = initReadings({
     csvButton: $('readingsCsv'), clearButton: $('readingsClear'), message: $('readingsMsg'),
   },
 });
+$('repTable').onclick = () => forms.addTable(readings.rows());
+
 // The Save reading button and the report's instrument line follow the meter.
 setInterval(() => {
   readings.refresh();

@@ -347,6 +347,7 @@ export function initForms({ store, getData, getMeter, els }) {
     copyGraph,
     // Adds a copy of the Saved readings table to the report.
     addTable(rows) {
+      if (!rows.length) return say('There are no saved readings yet. Use Save reading in the Live Reading section first.', true);
       if (elements.length >= MAX_ELEMENTS) return say(`A report holds at most ${MAX_ELEMENTS} elements.`, true);
       elements.push({ id: nextId++, type: 'table', description: '', rows: rows.map((r) => ({ ...r })) });
       renderElements();

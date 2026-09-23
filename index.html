@@ -139,6 +139,7 @@
   #memoryBody{margin-top:8px;}
   .mem-block{margin-top:18px;padding:0;}
   .row-actions{display:flex;flex-wrap:wrap;gap:6px;}
+  .mem-scroll table.has-action td:last-child,.mem-scroll table.has-action th:last-child{text-align:right;white-space:nowrap;width:1%;}
   .mem-block h4{margin:0 0 8px;font-size:13px;font-family:var(--mono);letter-spacing:.06em;color:var(--muted);font-weight:600;}
   .mem-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);}
   .mem-scroll table{border-collapse:collapse;width:100%;font-size:13px;}
@@ -458,10 +459,9 @@
         <details class="card collapsible memory" id="memoryCard" open hidden>
           <summary class="meta"><span class="title">Meter Memory</span><span class="grow"></span><span id="memoryCounts"></span></summary>
           <p class="hint" style="margin:14px 0 12px">Reads what is stored on the meter: saved measurements, min/max and peak sessions, and recordings.
-            Use View in graph to plot saved measurements, a recording or a min/max or peak session in the Graph section, where it can be exported. Read-only: nothing on the meter is changed or erased.</p>
+            Use View in graph to plot a recording or a min/max or peak session in the Graph section, where it can be exported. Read-only: nothing on the meter is changed or erased.</p>
           <div class="controls" style="margin-top:0">
             <button id="memoryRead" class="btn btn-primary btn-sm">Read memory</button>
-            <button id="memoryView" class="btn btn-ghost btn-sm" disabled title="Plot the saved measurements in the graph (replaces what the graph shows now)">View saved measurements in graph</button>
             <span id="memoryMsg" class="hint" role="status"></span>
           </div>
           <div id="memoryBody"></div>

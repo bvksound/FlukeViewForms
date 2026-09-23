@@ -1,6 +1,6 @@
 // The "Reports" panel: the report page itself, on screen. Type into the fields where they appear, click the logo slot
 // to add a logo of your own, and build the body from elements you add on purpose: a copy of the graph, or a copy of the
-// Saved readings table, each with a description. Then export the PDF.
+// Saved readings table, or a table from the Meter Memory section, each with a description. Then export the PDF.
 // The layout (title, fields, logo) is remembered for the next report; the elements are for this report only.
 import { formatQuantity } from './format.js';
 import { FOOTER_TEXT, formatDuration, buildReportPdf, summarize } from './report.js';
@@ -155,13 +155,37 @@ export function initForms({ store, getData, getMeter, els }) {
       el('table', { className: 'p-table' }, el('thead', {}, el('tr', {}, ...['Time', 'Function', 'Reading', 'Description', ''].map((h) => el('th', { textContent: h })))), body));
   }
 
+  // ---- a table copied from the Meter Memory section (saved measurements, sessions, recordings): read-only text
+  // cells, but rows can be dropped and the table can have a description
+  function memoryBlock(item) {
+    const body = el('tbody');
+    const draw = () => {
+      body.replaceChildren(...item.rows.map((cells, i) => el('tr', {},
+        ...item.columns.map((_, c) => el('td', { textContent: cells[c] ?? '' })),
+        el('td', {}, removeButton('Remove this row from the report', () => {
+          item.rows.splice(i, 1);
+          draw();
+        })))));
+      if (!item.rows.length) body.append(el('tr', {}, el('td', { colSpan: item.columns.length + 1, className: 'p-muted', textContent: 'No rows in this table.' })));
+    };
+    draw();
+    return el('div', { className: 'p-element' },
+      el('div', { className: 'p-section-head' }, el('h3', { textContent: item.title }),
+        removeButton('Remove this table from the report', () => {
+          elements = elements.filter((e) => e !== item);
+          renderElements();
+        })),
+      bind(el('input', { className: 'p-desc', value: item.description, maxLength: 500, placeholder: 'Description (optional)', 'aria-label': 'Table description' }), (v) => (item.description = v), false),
+      el('table', { className: 'p-table' }, el('thead', {}, el('tr', {}, ...[...item.columns, ''].map((h) => el('th', { textContent: h })))), body));
+  }
+
   // The body of the report: the elements added so far.
   function renderElements() {
     const host = els.paper.querySelector('.p-elements');
     if (!host) return;
     host.replaceChildren(...(elements.length
-      ? elements.map((e) => (e.type === 'table' ? tableBlock(e) : graphBlock(e)))
-      : [el('p', { className: 'p-hint', textContent: 'Nothing added yet. "Copy graph to report" adds the graph as it is now, and "Copy table to report" in the Saved readings card adds that table. Each can have a description.' })]));
+      ? elements.map((e) => (e.type === 'table' ? tableBlock(e) : e.type === 'memory' ? memoryBlock(e) : graphBlock(e)))
+      : [el('p', { className: 'p-hint', textContent: 'Nothing added yet. "Copy graph to report" adds the graph as it is now, and "Copy table to report" in the Saved readings card adds that table. Tables from Meter Memory can be copied too. Each can have a description.' })]));
     els.copyButton.disabled = elements.length >= MAX_ELEMENTS;
     refresh();
   }
@@ -283,9 +307,11 @@ export function initForms({ store, getData, getMeter, els }) {
   }
 
   // The elements in the shape the PDF builder wants.
-  const forPdf = () => elements.map((e) => (e.type === 'table'
-    ? { type: 'table', title: 'Readings', description: e.description, rows: e.rows.map((r) => ({ t: r.t, function: r.function, text: r.text, description: r.description })) }
-    : { type: 'graph', description: e.description, ...e.section }));
+  const forPdf = () => elements.map((e) => {
+    if (e.type === 'table') return { type: 'table', title: 'Readings', description: e.description, rows: e.rows.map((r) => ({ t: r.t, function: r.function, text: r.text, description: r.description })) };
+    if (e.type === 'memory') return { type: 'memory', title: e.title, description: e.description, columns: e.columns, rows: e.rows };
+    return { type: 'graph', description: e.description, ...e.section };
+  });
 
   async function generate() {
     store.save(template);
@@ -346,6 +372,20 @@ export function initForms({ store, getData, getMeter, els }) {
     refresh,
     copyGraph,
     // Adds a copy of the Saved readings table to the report.
+    // Adds tables from the Meter Memory section: groups of { title, columns, rows }. Returns a message saying what
+    // happened, so the Memory section can show it where the button was pressed.
+    addMemory(groups) {
+      let message;
+      if (!groups.length) message = 'There is nothing to copy: read the meter\'s memory first.';
+      else if (elements.length + groups.length > MAX_ELEMENTS) message = `A report holds at most ${MAX_ELEMENTS} elements.`;
+      else {
+        for (const g of groups) elements.push({ id: nextId++, type: 'memory', title: g.title, description: '', columns: [...g.columns], rows: g.rows.map((r) => [...r]) });
+        renderElements();
+        message = `Copied ${groups.map((g) => `"${g.title}"`).join(', ')} to the report. Open the Report section to add a description.`;
+      }
+      say(message, !groups.length || message.startsWith('A report'));
+      return message;
+    },
     addTable(rows) {
       if (!rows.length) return say('There are no saved readings yet. Use Save reading in the Live Reading section first.', true);
       if (elements.length >= MAX_ELEMENTS) return say(`A report holds at most ${MAX_ELEMENTS} elements.`, true);

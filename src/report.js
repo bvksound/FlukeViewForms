@@ -4,11 +4,12 @@
 //   data: { meter: { model, firmware, serial, owner: { company, site, operator, contact } } | null,
 //           elements: [ the parts of the report, in order:
 //             { type: 'graph', title, description, unit, points (already limited to the cursor window), total, selection, image (JPEG bytes|null) }
-//             { type: 'table', title, description, rows: [{ t (ms), function, text (the reading as shown), description }] } ] }
+//             { type: 'table', title, description, rows: [{ t (ms), function, text (the reading as shown), description }] }
+//             { type: 'memory', title, description, columns: [label], rows: [[text]] } (a table copied from the Meter Memory section) ] }
 import { formatQuantity } from './format.js';
 import { BVK_LOGO, FLUKE_LOGO } from './logos.js';
 import { localTimestamp, pointsToTable } from './graph-text.js';
-import { PdfDocument, jpegInfo, wrapText } from './pdf.js';
+import { PdfDocument, jpegInfo, textWidth, wrapText } from './pdf.js';
 import { normalizeTemplate, pageSize } from './templates.js';
 
 // The footer is fixed: the BVK logo and this line (an em dash and middle dots, all in the PDF's WinAnsi encoding).
@@ -55,6 +56,33 @@ export function formatDuration(ms) {
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   return h ? `${h} h ${String(m).padStart(2, '0')} min ${String(sec).padStart(2, '0')} s` : `${m} min ${String(sec).padStart(2, '0')} s`;
+}
+
+// Column widths for a table of text, filling `total` points. Each column wants to be as wide as its widest cell (header
+// included). When they don't all fit, only the widest columns give way (down to a common cap), so short cells keep
+// their room and the long ones wrap; when there is spare room it is shared in proportion.
+export function columnWidths(columns, rows, total, size = 8.5) {
+  const natural = columns.map((label, i) => {
+    const widest = Math.max(textWidth(label, size - 0.5, true), ...rows.map((r) => textWidth(String(r[i] ?? ''), size)));
+    return widest + 12;
+  });
+  const sum = natural.reduce((a, b) => a + b, 0);
+  if (!natural.length || sum === 0) return natural;
+  if (sum <= total) return natural.map((w) => (w * total) / sum);
+  // Find the cap t with sum(min(natural, t)) = total: the widest columns are cut to t, the rest stay as they are.
+  const sorted = [...natural].sort((x, y) => x - y);
+  let used = 0;
+  let cap = total / natural.length;
+  for (let i = 0; i < sorted.length; i++) {
+    const rest = sorted.length - i;
+    const share = (total - used) / rest;
+    if (sorted[i] <= share) used += sorted[i];
+    else {
+      cap = share;
+      break;
+    }
+  }
+  return natural.map((w) => Math.min(w, cap));
 }
 
 // At most `max` rows, evenly spread and always ending on the last row.
@@ -216,6 +244,37 @@ export function buildReportPdf({ template, data, now = new Date() }) {
   };
 
   for (const element of elements) {
+    if (element.type === 'memory') {
+      // a table copied from the Meter Memory section: any columns, text wrapped inside each cell
+      const columns = element.columns ?? [];
+      const rows = element.rows ?? [];
+      heading(element.title || 'Meter memory', 40);
+      describe(element.description);
+      if (!rows.length) {
+        doc.text('There are no entries.', M, y + 6, { size: 9.5, color: MUTED });
+        y += 18;
+        continue;
+      }
+      const widths = columnWidths(columns, rows, W);
+      const xs = widths.map((_, i) => M + widths.slice(0, i).reduce((a, b) => a + b, 0));
+      const drawHeader = () => {
+        columns.forEach((label, i) => doc.text(label, xs[i] + 4, y + 10, { size: 8, bold: true, color: MUTED }));
+        doc.line(M, y + 15, M + W, y + 15, { color: RULE });
+        y += 18;
+      };
+      need(40);
+      drawHeader();
+      rows.forEach((row, n) => {
+        const cells = columns.map((_, i) => wrapText(String(row[i] ?? ''), widths[i] - 8, 8.5));
+        const h = Math.max(14, Math.max(...cells.map((c) => c.length)) * 11 + 3);
+        if (need(h + 2)) drawHeader();
+        if (n % 2) doc.rect(M, y, W, h, { fill: ZEBRA });
+        cells.forEach((lines, i) => lines.forEach((line, k) => doc.text(line, xs[i] + 4, y + 10 + k * 11, { size: 8.5, color: INK })));
+        y += h;
+      });
+      y += 6;
+      continue;
+    }
     if (element.type === 'table') {
       // a table of saved readings: time, the reading as it was shown, and a note per row
       const rows = element.rows ?? [];

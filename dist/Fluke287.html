@@ -141,6 +141,7 @@
   #memoryBody{margin-top:8px;}
   .mem-block{margin-top:18px;padding:0;}
   .row-actions{display:flex;flex-wrap:wrap;gap:6px;}
+  .mem-scroll table.has-action td:last-child,.mem-scroll table.has-action th:last-child{text-align:right;white-space:nowrap;width:1%;}
   .mem-block h4{margin:0 0 8px;font-size:13px;font-family:var(--mono);letter-spacing:.06em;color:var(--muted);font-weight:600;}
   .mem-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);}
   .mem-scroll table{border-collapse:collapse;width:100%;font-size:13px;}
@@ -460,10 +461,9 @@
         <details class="card collapsible memory" id="memoryCard" open hidden>
           <summary class="meta"><span class="title">Meter Memory</span><span class="grow"></span><span id="memoryCounts"></span></summary>
           <p class="hint" style="margin:14px 0 12px">Reads what is stored on the meter: saved measurements, min/max and peak sessions, and recordings.
-            Use View in graph to plot saved measurements, a recording or a min/max or peak session in the Graph section, where it can be exported. Read-only: nothing on the meter is changed or erased.</p>
+            Use View in graph to plot a recording or a min/max or peak session in the Graph section, where it can be exported. Read-only: nothing on the meter is changed or erased.</p>
           <div class="controls" style="margin-top:0">
             <button id="memoryRead" class="btn btn-primary btn-sm">Read memory</button>
-            <button id="memoryView" class="btn btn-ghost btn-sm" disabled title="Plot the saved measurements in the graph (replaces what the graph shows now)">View saved measurements in graph</button>
             <span id="memoryMsg" class="hint" role="status"></span>
           </div>
           <div id="memoryBody"></div>
@@ -1961,7 +1961,7 @@ __modules["report"] = (() => {
   const { formatQuantity } = __modules["format"];
   const { BVK_LOGO, FLUKE_LOGO } = __modules["logos"];
   const { localTimestamp, pointsToTable } = __modules["graph-text"];
-  const { PdfDocument, jpegInfo, wrapText } = __modules["pdf"];
+  const { PdfDocument, jpegInfo, textWidth, wrapText } = __modules["pdf"];
   const { normalizeTemplate, pageSize } = __modules["templates"];
 // Turns a report template plus measurement data into a PDF. A minimal layout: a slim header with a logo, the fields
 // that were filled in, one line about the instrument, then one section per graph, and a footer with a logo.
@@ -1969,7 +1969,8 @@ __modules["report"] = (() => {
 //   data: { meter: { model, firmware, serial, owner: { company, site, operator, contact } } | null,
 //           elements: [ the parts of the report, in order:
 //             { type: 'graph', title, description, unit, points (already limited to the cursor window), total, selection, image (JPEG bytes|null) }
-//             { type: 'table', title, description, rows: [{ t (ms), function, text (the reading as shown), description }] } ] }
+//             { type: 'table', title, description, rows: [{ t (ms), function, text (the reading as shown), description }] }
+//             { type: 'memory', title, description, columns: [label], rows: [[text]] } (a table copied from the Meter Memory section) ] }
 
 // The footer is fixed: the BVK logo and this line (an em dash and middle dots, all in the PDF's WinAnsi encoding).
 const FOOTER_TEXT = 'BVKsound \u2014 Professional Audio \u00b7 Embedded Systems \u00b7 Acoustic Measurement';
@@ -2015,6 +2016,33 @@ function formatDuration(ms) {
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   return h ? `${h} h ${String(m).padStart(2, '0')} min ${String(sec).padStart(2, '0')} s` : `${m} min ${String(sec).padStart(2, '0')} s`;
+}
+
+// Column widths for a table of text, filling `total` points. Each column wants to be as wide as its widest cell (header
+// included). When they don't all fit, only the widest columns give way (down to a common cap), so short cells keep
+// their room and the long ones wrap; when there is spare room it is shared in proportion.
+function columnWidths(columns, rows, total, size = 8.5) {
+  const natural = columns.map((label, i) => {
+    const widest = Math.max(textWidth(label, size - 0.5, true), ...rows.map((r) => textWidth(String(r[i] ?? ''), size)));
+    return widest + 12;
+  });
+  const sum = natural.reduce((a, b) => a + b, 0);
+  if (!natural.length || sum === 0) return natural;
+  if (sum <= total) return natural.map((w) => (w * total) / sum);
+  // Find the cap t with sum(min(natural, t)) = total: the widest columns are cut to t, the rest stay as they are.
+  const sorted = [...natural].sort((x, y) => x - y);
+  let used = 0;
+  let cap = total / natural.length;
+  for (let i = 0; i < sorted.length; i++) {
+    const rest = sorted.length - i;
+    const share = (total - used) / rest;
+    if (sorted[i] <= share) used += sorted[i];
+    else {
+      cap = share;
+      break;
+    }
+  }
+  return natural.map((w) => Math.min(w, cap));
 }
 
 // At most `max` rows, evenly spread and always ending on the last row.
@@ -2176,6 +2204,37 @@ function buildReportPdf({ template, data, now = new Date() }) {
   };
 
   for (const element of elements) {
+    if (element.type === 'memory') {
+      // a table copied from the Meter Memory section: any columns, text wrapped inside each cell
+      const columns = element.columns ?? [];
+      const rows = element.rows ?? [];
+      heading(element.title || 'Meter memory', 40);
+      describe(element.description);
+      if (!rows.length) {
+        doc.text('There are no entries.', M, y + 6, { size: 9.5, color: MUTED });
+        y += 18;
+        continue;
+      }
+      const widths = columnWidths(columns, rows, W);
+      const xs = widths.map((_, i) => M + widths.slice(0, i).reduce((a, b) => a + b, 0));
+      const drawHeader = () => {
+        columns.forEach((label, i) => doc.text(label, xs[i] + 4, y + 10, { size: 8, bold: true, color: MUTED }));
+        doc.line(M, y + 15, M + W, y + 15, { color: RULE });
+        y += 18;
+      };
+      need(40);
+      drawHeader();
+      rows.forEach((row, n) => {
+        const cells = columns.map((_, i) => wrapText(String(row[i] ?? ''), widths[i] - 8, 8.5));
+        const h = Math.max(14, Math.max(...cells.map((c) => c.length)) * 11 + 3);
+        if (need(h + 2)) drawHeader();
+        if (n % 2) doc.rect(M, y, W, h, { fill: ZEBRA });
+        cells.forEach((lines, i) => lines.forEach((line, k) => doc.text(line, xs[i] + 4, y + 10 + k * 11, { size: 8.5, color: INK })));
+        y += h;
+      });
+      y += 6;
+      continue;
+    }
     if (element.type === 'table') {
       // a table of saved readings: time, the reading as it was shown, and a note per row
       const rows = element.rows ?? [];
@@ -2308,7 +2367,7 @@ function buildReportPdf({ template, data, now = new Date() }) {
   return doc.build(now);
 }
 
-  return { FOOTER_TEXT, summarize, formatDuration, decimate, buildReportPdf };
+  return { FOOTER_TEXT, summarize, formatDuration, columnWidths, decimate, buildReportPdf };
 })();
 
 __modules["forms-ui"] = (() => {
@@ -2319,7 +2378,7 @@ __modules["forms-ui"] = (() => {
   const { localTimestamp } = __modules["graph-text"];
 // The "Reports" panel: the report page itself, on screen. Type into the fields where they appear, click the logo slot
 // to add a logo of your own, and build the body from elements you add on purpose: a copy of the graph, or a copy of the
-// Saved readings table, each with a description. Then export the PDF.
+// Saved readings table, or a table from the Meter Memory section, each with a description. Then export the PDF.
 // The layout (title, fields, logo) is remembered for the next report; the elements are for this report only.
 
 const MAX_ELEMENTS = 20;
@@ -2469,13 +2528,37 @@ function initForms({ store, getData, getMeter, els }) {
       el('table', { className: 'p-table' }, el('thead', {}, el('tr', {}, ...['Time', 'Function', 'Reading', 'Description', ''].map((h) => el('th', { textContent: h })))), body));
   }
 
+  // ---- a table copied from the Meter Memory section (saved measurements, sessions, recordings): read-only text
+  // cells, but rows can be dropped and the table can have a description
+  function memoryBlock(item) {
+    const body = el('tbody');
+    const draw = () => {
+      body.replaceChildren(...item.rows.map((cells, i) => el('tr', {},
+        ...item.columns.map((_, c) => el('td', { textContent: cells[c] ?? '' })),
+        el('td', {}, removeButton('Remove this row from the report', () => {
+          item.rows.splice(i, 1);
+          draw();
+        })))));
+      if (!item.rows.length) body.append(el('tr', {}, el('td', { colSpan: item.columns.length + 1, className: 'p-muted', textContent: 'No rows in this table.' })));
+    };
+    draw();
+    return el('div', { className: 'p-element' },
+      el('div', { className: 'p-section-head' }, el('h3', { textContent: item.title }),
+        removeButton('Remove this table from the report', () => {
+          elements = elements.filter((e) => e !== item);
+          renderElements();
+        })),
+      bind(el('input', { className: 'p-desc', value: item.description, maxLength: 500, placeholder: 'Description (optional)', 'aria-label': 'Table description' }), (v) => (item.description = v), false),
+      el('table', { className: 'p-table' }, el('thead', {}, el('tr', {}, ...[...item.columns, ''].map((h) => el('th', { textContent: h })))), body));
+  }
+
   // The body of the report: the elements added so far.
   function renderElements() {
     const host = els.paper.querySelector('.p-elements');
     if (!host) return;
     host.replaceChildren(...(elements.length
-      ? elements.map((e) => (e.type === 'table' ? tableBlock(e) : graphBlock(e)))
-      : [el('p', { className: 'p-hint', textContent: 'Nothing added yet. "Copy graph to report" adds the graph as it is now, and "Copy table to report" in the Saved readings card adds that table. Each can have a description.' })]));
+      ? elements.map((e) => (e.type === 'table' ? tableBlock(e) : e.type === 'memory' ? memoryBlock(e) : graphBlock(e)))
+      : [el('p', { className: 'p-hint', textContent: 'Nothing added yet. "Copy graph to report" adds the graph as it is now, and "Copy table to report" in the Saved readings card adds that table. Tables from Meter Memory can be copied too. Each can have a description.' })]));
     els.copyButton.disabled = elements.length >= MAX_ELEMENTS;
     refresh();
   }
@@ -2597,9 +2680,11 @@ function initForms({ store, getData, getMeter, els }) {
   }
 
   // The elements in the shape the PDF builder wants.
-  const forPdf = () => elements.map((e) => (e.type === 'table'
-    ? { type: 'table', title: 'Readings', description: e.description, rows: e.rows.map((r) => ({ t: r.t, function: r.function, text: r.text, description: r.description })) }
-    : { type: 'graph', description: e.description, ...e.section }));
+  const forPdf = () => elements.map((e) => {
+    if (e.type === 'table') return { type: 'table', title: 'Readings', description: e.description, rows: e.rows.map((r) => ({ t: r.t, function: r.function, text: r.text, description: r.description })) };
+    if (e.type === 'memory') return { type: 'memory', title: e.title, description: e.description, columns: e.columns, rows: e.rows };
+    return { type: 'graph', description: e.description, ...e.section };
+  });
 
   async function generate() {
     store.save(template);
@@ -2660,6 +2745,20 @@ function initForms({ store, getData, getMeter, els }) {
     refresh,
     copyGraph,
     // Adds a copy of the Saved readings table to the report.
+    // Adds tables from the Meter Memory section: groups of { title, columns, rows }. Returns a message saying what
+    // happened, so the Memory section can show it where the button was pressed.
+    addMemory(groups) {
+      let message;
+      if (!groups.length) message = 'There is nothing to copy: read the meter\'s memory first.';
+      else if (elements.length + groups.length > MAX_ELEMENTS) message = `A report holds at most ${MAX_ELEMENTS} elements.`;
+      else {
+        for (const g of groups) elements.push({ id: nextId++, type: 'memory', title: g.title, description: '', columns: [...g.columns], rows: g.rows.map((r) => [...r]) });
+        renderElements();
+        message = `Copied ${groups.map((g) => `"${g.title}"`).join(', ')} to the report. Open the Report section to add a description.`;
+      }
+      say(message, !groups.length || message.startsWith('A report'));
+      return message;
+    },
     addTable(rows) {
       if (!rows.length) return say('There are no saved readings yet. Use Save reading in the Live Reading section first.', true);
       if (elements.length >= MAX_ELEMENTS) return say(`A report holds at most ${MAX_ELEMENTS} elements.`, true);
@@ -3180,9 +3279,40 @@ function sessionTrend(item, label) {
   return { title: `${label} "${item.name}": ${points.length} readings`, unit: unitSymbol(unit), style: 'points', points };
 }
 
+// The memory panel's tables as plain text, one group per table that has entries. Rows keep their `item` (for the
+// per-row buttons); `cells` are what is shown, and what a report copy contains.
+function memoryGroups(data) {
+  if (!data) return [];
+  const primary = (item) => item.readings.PRIMARY ?? Object.values(item.readings)[0];
+  const failed = (index, error) => [`${index + 1}`, `could not read: ${error.message}`];
+  const readings = (item) => Object.values(item.readings).map((r) => `${r.id.toLowerCase()} ${show(r)}`).join(' \u00b7 ');
+  const group = (key, title, columns, list, cellsFor) => ({
+    key, title, columns,
+    rows: list.map(({ index, item, error }) => ({ item, error, cells: error ? failed(index, error) : cellsFor(index, item) })),
+  });
+  return [
+    group('measurements', 'Saved measurements', ['#', 'Name', 'Time', 'Function', 'Reading'], data.measurements,
+      (i, item) => [`${i + 1}`, item.name, when(primary(item)?.time ?? 0), prettyFunction(item.primaryFunction), show(primary(item))]),
+    group('minMax', 'Min / max sessions', ['#', 'Name', 'Start', 'End', 'Function', 'Readings'], data.minMax,
+      (i, item) => [`${i + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction), readings(item)]),
+    group('peak', 'Peak sessions', ['#', 'Name', 'Start', 'End', 'Function', 'Readings'], data.peak,
+      (i, item) => [`${i + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction), readings(item)]),
+    group('recordings', 'Recordings', ['#', 'Name', 'Start', 'End', 'Interval', 'Samples'], data.recordings,
+      (i, item) => [`${i + 1}`, item.name, when(item.start), when(item.end), `${item.sampleInterval} s`, `${item.sampleCount}`]),
+  ].filter((g) => g.rows.length);
+}
+
+// Tables that can be copied straight into a report. A recording's data is in its samples, so a recording goes
+// through the graph first (View in graph, then Copy graph to report); its list would only be names and times.
+const REPORTABLE = new Set(['measurements', 'minMax', 'peak']);
+
+// What goes into a report: the text of a group, without the live items behind it.
+const groupForReport = (g) => ({ title: g.title, columns: g.columns, rows: g.rows.map((r) => r.cells) });
+
 function initMemory({
-  counts, message, body, readButton, viewButton, getMeter, setBusy,
+  counts, message, body, readButton, getMeter, setBusy,
   showTrend = () => {}, graphInfo = () => ({ hasData: false, view: 'live' }),
+  onCopy = () => 'Copying to the report is not available', // (groups) => a message saying what happened
 }) {
   let reader = null;
   let readerMeter = null;
@@ -3206,11 +3336,12 @@ function initMemory({
   const summaryText = (s) =>
     `${s.measurements} saved · ${s.minMax} min/max · ${s.peak} peak · ${s.recordings} recording${s.recordings === 1 ? '' : 's'}`;
 
+  // Every table ends in a button column, with all buttons in ordinary body rows so they look and sit the same.
   function table(title, columns, rows) {
     const head = el('tr', {}, ...columns.map((c) => el('th', { textContent: c })));
     const bodyRows = rows.map((cells) => el('tr', {}, ...cells.map((c) => el('td', {}, c))));
     return el('section', { className: 'mem-block' }, el('h4', { textContent: title }),
-      el('div', { className: 'mem-scroll' }, el('table', {}, el('thead', {}, head), el('tbody', {}, ...bodyRows))));
+      el('div', { className: 'mem-scroll' }, el('table', { className: 'has-action' }, el('thead', {}, head), el('tbody', {}, ...bodyRows))));
   }
 
   function render() {
@@ -3221,34 +3352,27 @@ function initMemory({
       body.append(el('p', { className: 'hint', textContent: 'Nothing is stored on the meter. Press Save on the meter (or record a session there), then read again.' }));
       return;
     }
-    const failed = (e) => [el('span', { className: 'bad', textContent: `could not read: ${e.message}` })];
-
-    if (measurements.length) {
-      body.append(table('Saved measurements', ['#', 'Name', 'Time', 'Function', 'Reading'],
-        measurements.map(({ index, item, error }) => (error ? [`${index + 1}`, ...failed(error)]
-          : [`${index + 1}`, item.name, when((item.readings.PRIMARY ?? Object.values(item.readings)[0])?.time ?? 0),
-            prettyFunction(item.primaryFunction), show(item.readings.PRIMARY ?? Object.values(item.readings)[0])]))));
-    }
-    for (const [title, list] of [['Min / max sessions', minMax], ['Peak sessions', peak]]) {
-      if (!list.length) continue;
-      const label = title.startsWith('Peak') ? 'Peak session' : 'Min/max session';
-      body.append(table(title, ['#', 'Name', 'Start', 'End', 'Function', 'Readings', ''],
-        list.map(({ index, item, error }) => {
-          if (error) return [`${index + 1}`, ...failed(error)];
+    for (const g of memoryGroups(data)) {
+      const copy = REPORTABLE.has(g.key) && el('button', { className: 'btn btn-ghost btn-sm', textContent: 'Copy to report', title: `Adds this table (${g.title}) to the report` });
+      if (copy) copy.onclick = () => say(onCopy([groupForReport(g)]));
+      const rows = g.rows.map(({ item, error, cells }, i) => {
+        if (error) return [cells[0], el('span', { className: 'bad', textContent: cells[1] })];
+        // sessions and recordings can be shown in the graph from a button on the row
+        if (g.key === 'minMax' || g.key === 'peak') {
           const view = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'View in graph' });
-          view.onclick = () => viewSession(item, label);
-          return [`${index + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction),
-            Object.values(item.readings).map((r) => `${r.id.toLowerCase()} ${show(r)}`).join(' · '), view];
-        })));
-    }
-    if (recordings.length) {
-      body.append(table('Recordings', ['#', 'Name', 'Start', 'End', 'Interval', 'Samples', ''],
-        recordings.map(({ index, item, error }) => {
-          if (error) return [`${index + 1}`, ...failed(error)];
+          view.onclick = () => viewSession(item, g.key === 'peak' ? 'Peak session' : 'Min/max session');
+          return [...cells, view];
+        }
+        if (g.key === 'recordings') {
           const view = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'View in graph' });
           view.onclick = () => viewRecording(item, view);
-          return [`${index + 1}`, item.name, when(item.start), when(item.end), `${item.sampleInterval} s`, `${item.sampleCount}`, view];
-        })));
+          return [...cells, view];
+        }
+        return [...cells, i === 0 ? copy : ''];
+      });
+      // sessions already have a button on every row (and a failed first row can't hold one), so copy gets a row of its own
+      if (copy && rows.length && (g.key !== 'measurements' || g.rows[0].error)) rows.push([...g.columns.map(() => ''), copy]);
+      body.append(table(g.title, [...g.columns, ''], rows));
     }
   }
 
@@ -3309,13 +3433,6 @@ function initMemory({
     say(`Showing the ${label.toLowerCase()} in the graph`);
   }
 
-  function viewMeasurements() {
-    const trend = data && measurementsTrend(data.measurements);
-    if (!trend || !confirmReplace('the saved measurements')) return;
-    showTrend(trend);
-    say('Showing the saved measurements in the graph');
-  }
-
   // Reading the counts is one quick command, so it runs on connect.
   async function loadSummary() {
     const meter = getMeter();
@@ -3356,7 +3473,6 @@ function initMemory({
       }
       data = result;
       render();
-      viewButton.disabled = !measurementsTrend(result.measurements);
       say(`Done: ${summaryText(summary)}`);
     } catch (e) {
       say(`Could not read memory: ${e.message}`, true);
@@ -3367,7 +3483,6 @@ function initMemory({
   }
 
   readButton.onclick = readAll;
-  viewButton.onclick = viewMeasurements;
 
   return {
     loadSummary,
@@ -3376,14 +3491,13 @@ function initMemory({
       reader = readerMeter = null;
       body.replaceChildren();
       counts.textContent = '';
-      viewButton.disabled = true;
       sampleCache.clear();
       say('');
     },
   };
 }
 
-  return { measurementsTrend, recordingTrend, sessionTrend, initMemory };
+  return { measurementsTrend, recordingTrend, sessionTrend, memoryGroups, REPORTABLE, groupForReport, initMemory };
 })();
 
 __modules["readings"] = (() => {
@@ -4203,10 +4317,10 @@ const memory = initMemory({
   message: $('memoryMsg'),
   body: $('memoryBody'),
   readButton: $('memoryRead'),
-  viewButton: $('memoryView'),
   graphInfo: () => ({ hasData: graph.hasData, view: graph.view }),
   getMeter: () => meter,
   setBusy: (busy) => (paused = busy),
+  onCopy: (groups) => forms.addMemory(groups),
   showTrend: ({ title, unit, style, points }) => {
     dataTitle = title;
     graph.setData({ points, unit, style });

@@ -92,10 +92,10 @@ const memory = initMemory({
   message: $('memoryMsg'),
   body: $('memoryBody'),
   readButton: $('memoryRead'),
-  viewButton: $('memoryView'),
   graphInfo: () => ({ hasData: graph.hasData, view: graph.view }),
   getMeter: () => meter,
   setBusy: (busy) => (paused = busy),
+  onCopy: (groups) => forms.addMemory(groups),
   showTrend: ({ title, unit, style, points }) => {
     dataTitle = title;
     graph.setData({ points, unit, style });

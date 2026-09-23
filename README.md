@@ -30,15 +30,14 @@ scripts/sync-website.sh /path/to/website   # optional: builds and copies it into
 | Scrollable live graph, Y-axis auto/manual/zoom/pan | Working (tested against a fake serial port; verify on the meter) |
 | Remembered port, auto-connect | Working |
 | Battery level (four-bar icon) | Working |
-| Settings page with tabs (Meter, Owner & save slots, Reset & tools, Viewer) | Working; write syntax verified on a real 287 |
+| Settings section with tabs (Meter, Owner & save slots, Reset & tools, Viewer); read-only Meter info with calibration counter and version | Working; write syntax verified on a real 287 |
 | Advanced: default setup, resets, raw command box | Working; resets not yet run on a real meter |
 | Saved readings: a Save reading button beside the big reading adds a row (time, function, reading, unit, state, description) to a table kept in the browser; export as CSV or copy to the report | Working |
 | PDF reports: a page you fill in on screen (title, configurable fields, one optional extra logo), built from a copy of the graph and/or a table of readings saved from the meter, each with a description; Fluke logo on top and BVK footer built in | Working; PDFs checked with an independent reader, not on printed paper |
+| Tables from Meter Memory (saved measurements, min/max and peak sessions, recordings) can be copied into the report with a per-table Copy to report button, each with a description | Working |
 | Meter memory readout (saved measurements, min/max, peak, recordings, CSV) | Recordings verified on a real 287; saved measurements, min/max and peak decoders still untested on real data |
 | Graph as the single place to view and export: live trace or memory data (saved measurements, min/max and peak sessions as dots, recordings as a line with a min/max band); Export CSV, Export JPG, copy x,y values, copy image, x-axis cursors to export only a range, all from the right-click menu | Working in the browser with a simulated meter |
 | Collapsible sections | Working, remembered between visits |
-| Form templates (logo, title, fields) | Planned: JSON templates in IndexedDB |
-| PDF export | Planned: client-side (pdf-lib or jsPDF) |
 
 ## Protocol
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Meter } from '../src/meter.js';
 import { MemoryReader, MAP_NAMES } from '../src/memory.js';
+import { REPORTABLE, groupForReport, memoryGroups } from '../src/memory-ui.js';
 import {
   f64, parseLive, parseMap, parseMinMaxPeak, parseRecordingInfo, parseRecordingSample, parseSavedMeasurement, s16, u16,
 } from '../src/records.js';
@@ -212,4 +213,29 @@ test('recording sample: the stored average is a sum, divided by the reading coun
   // no readings in the interval: no average rather than a division by zero
   s.u16(106, 0);
   assert.ok(Number.isNaN(parseRecordingSample(s.bytes, lookup).average));
+});
+
+test('memoryGroups: the panel tables as plain text, empty ones left out, failures kept as a row', () => {
+  const at = Date.UTC(2026, 8, 20, 21, 8, 29) / 1000;
+  const reading = (id, value) => ({ id, value, unit: 'VAC', unitMultiplier: -3, decimals: 3, state: 'NORMAL', time: at });
+  const data = {
+    summary: {},
+    measurements: [{ index: 0, item: { name: 'Panel 2', primaryFunction: 'MV_AC', readings: { PRIMARY: reading('PRIMARY', 0.003943) } } }, { index: 1, error: new Error('timed out') }],
+    minMax: [{ index: 0, item: { name: 'MM 1', primaryFunction: 'V_DC', start: at, end: at + 600, readings: { MINIMUM: reading('MINIMUM', 0.001), MAXIMUM: reading('MAXIMUM', 0.009) } } }],
+    peak: [],
+    recordings: [{ index: 0, item: { name: 'Panel 1', start: at, end: at + 9, sampleInterval: 1, sampleCount: 14 } }],
+  };
+  const groups = memoryGroups(data);
+  assert.deepEqual(groups.map((g) => g.title), ['Saved measurements', 'Min / max sessions', 'Recordings']);
+  assert.deepEqual(groups[0].rows[0].cells, ['1', 'Panel 2', '2026-09-20 21:08:29', 'mV AC', '3.943 mV AC']);
+  assert.deepEqual(groups[0].rows[1].cells, ['2', 'could not read: timed out']);
+  assert.match(groups[1].rows[0].cells[5], /minimum 1\.000 mV AC \u00b7 maximum 9\.000 mV AC/);
+  assert.deepEqual(groups[2].rows[0].cells, ['1', 'Panel 1', '2026-09-20 21:08:29', '2026-09-20 21:08:38', '1 s', '14']);
+  assert.deepEqual(groupForReport(groups[2]), { title: 'Recordings', columns: ['#', 'Name', 'Start', 'End', 'Interval', 'Samples'], rows: [groups[2].rows[0].cells] });
+  assert.deepEqual(memoryGroups(null), []);
+});
+
+test('recordings are not copied to a report as a list: they go through the graph', () => {
+  assert.deepEqual([...REPORTABLE].sort(), ['measurements', 'minMax', 'peak']);
+  assert.equal(REPORTABLE.has('recordings'), false);
 });

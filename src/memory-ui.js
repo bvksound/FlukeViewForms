@@ -65,9 +65,40 @@ export function sessionTrend(item, label) {
   return { title: `${label} "${item.name}": ${points.length} readings`, unit: unitSymbol(unit), style: 'points', points };
 }
 
+// The memory panel's tables as plain text, one group per table that has entries. Rows keep their `item` (for the
+// per-row buttons); `cells` are what is shown, and what a report copy contains.
+export function memoryGroups(data) {
+  if (!data) return [];
+  const primary = (item) => item.readings.PRIMARY ?? Object.values(item.readings)[0];
+  const failed = (index, error) => [`${index + 1}`, `could not read: ${error.message}`];
+  const readings = (item) => Object.values(item.readings).map((r) => `${r.id.toLowerCase()} ${show(r)}`).join(' \u00b7 ');
+  const group = (key, title, columns, list, cellsFor) => ({
+    key, title, columns,
+    rows: list.map(({ index, item, error }) => ({ item, error, cells: error ? failed(index, error) : cellsFor(index, item) })),
+  });
+  return [
+    group('measurements', 'Saved measurements', ['#', 'Name', 'Time', 'Function', 'Reading'], data.measurements,
+      (i, item) => [`${i + 1}`, item.name, when(primary(item)?.time ?? 0), prettyFunction(item.primaryFunction), show(primary(item))]),
+    group('minMax', 'Min / max sessions', ['#', 'Name', 'Start', 'End', 'Function', 'Readings'], data.minMax,
+      (i, item) => [`${i + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction), readings(item)]),
+    group('peak', 'Peak sessions', ['#', 'Name', 'Start', 'End', 'Function', 'Readings'], data.peak,
+      (i, item) => [`${i + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction), readings(item)]),
+    group('recordings', 'Recordings', ['#', 'Name', 'Start', 'End', 'Interval', 'Samples'], data.recordings,
+      (i, item) => [`${i + 1}`, item.name, when(item.start), when(item.end), `${item.sampleInterval} s`, `${item.sampleCount}`]),
+  ].filter((g) => g.rows.length);
+}
+
+// Tables that can be copied straight into a report. A recording's data is in its samples, so a recording goes
+// through the graph first (View in graph, then Copy graph to report); its list would only be names and times.
+export const REPORTABLE = new Set(['measurements', 'minMax', 'peak']);
+
+// What goes into a report: the text of a group, without the live items behind it.
+export const groupForReport = (g) => ({ title: g.title, columns: g.columns, rows: g.rows.map((r) => r.cells) });
+
 export function initMemory({
-  counts, message, body, readButton, viewButton, getMeter, setBusy,
+  counts, message, body, readButton, getMeter, setBusy,
   showTrend = () => {}, graphInfo = () => ({ hasData: false, view: 'live' }),
+  onCopy = () => 'Copying to the report is not available', // (groups) => a message saying what happened
 }) {
   let reader = null;
   let readerMeter = null;
@@ -91,11 +122,12 @@ export function initMemory({
   const summaryText = (s) =>
     `${s.measurements} saved · ${s.minMax} min/max · ${s.peak} peak · ${s.recordings} recording${s.recordings === 1 ? '' : 's'}`;
 
+  // Every table ends in a button column, with all buttons in ordinary body rows so they look and sit the same.
   function table(title, columns, rows) {
     const head = el('tr', {}, ...columns.map((c) => el('th', { textContent: c })));
     const bodyRows = rows.map((cells) => el('tr', {}, ...cells.map((c) => el('td', {}, c))));
     return el('section', { className: 'mem-block' }, el('h4', { textContent: title }),
-      el('div', { className: 'mem-scroll' }, el('table', {}, el('thead', {}, head), el('tbody', {}, ...bodyRows))));
+      el('div', { className: 'mem-scroll' }, el('table', { className: 'has-action' }, el('thead', {}, head), el('tbody', {}, ...bodyRows))));
   }
 
   function render() {
@@ -106,34 +138,27 @@ export function initMemory({
       body.append(el('p', { className: 'hint', textContent: 'Nothing is stored on the meter. Press Save on the meter (or record a session there), then read again.' }));
       return;
     }
-    const failed = (e) => [el('span', { className: 'bad', textContent: `could not read: ${e.message}` })];
-
-    if (measurements.length) {
-      body.append(table('Saved measurements', ['#', 'Name', 'Time', 'Function', 'Reading'],
-        measurements.map(({ index, item, error }) => (error ? [`${index + 1}`, ...failed(error)]
-          : [`${index + 1}`, item.name, when((item.readings.PRIMARY ?? Object.values(item.readings)[0])?.time ?? 0),
-            prettyFunction(item.primaryFunction), show(item.readings.PRIMARY ?? Object.values(item.readings)[0])]))));
-    }
-    for (const [title, list] of [['Min / max sessions', minMax], ['Peak sessions', peak]]) {
-      if (!list.length) continue;
-      const label = title.startsWith('Peak') ? 'Peak session' : 'Min/max session';
-      body.append(table(title, ['#', 'Name', 'Start', 'End', 'Function', 'Readings', ''],
-        list.map(({ index, item, error }) => {
-          if (error) return [`${index + 1}`, ...failed(error)];
+    for (const g of memoryGroups(data)) {
+      const copy = REPORTABLE.has(g.key) && el('button', { className: 'btn btn-ghost btn-sm', textContent: 'Copy to report', title: `Adds this table (${g.title}) to the report` });
+      if (copy) copy.onclick = () => say(onCopy([groupForReport(g)]));
+      const rows = g.rows.map(({ item, error, cells }, i) => {
+        if (error) return [cells[0], el('span', { className: 'bad', textContent: cells[1] })];
+        // sessions and recordings can be shown in the graph from a button on the row
+        if (g.key === 'minMax' || g.key === 'peak') {
           const view = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'View in graph' });
-          view.onclick = () => viewSession(item, label);
-          return [`${index + 1}`, item.name, when(item.start), when(item.end), prettyFunction(item.primaryFunction),
-            Object.values(item.readings).map((r) => `${r.id.toLowerCase()} ${show(r)}`).join(' · '), view];
-        })));
-    }
-    if (recordings.length) {
-      body.append(table('Recordings', ['#', 'Name', 'Start', 'End', 'Interval', 'Samples', ''],
-        recordings.map(({ index, item, error }) => {
-          if (error) return [`${index + 1}`, ...failed(error)];
+          view.onclick = () => viewSession(item, g.key === 'peak' ? 'Peak session' : 'Min/max session');
+          return [...cells, view];
+        }
+        if (g.key === 'recordings') {
           const view = el('button', { className: 'btn btn-ghost btn-sm', textContent: 'View in graph' });
           view.onclick = () => viewRecording(item, view);
-          return [`${index + 1}`, item.name, when(item.start), when(item.end), `${item.sampleInterval} s`, `${item.sampleCount}`, view];
-        })));
+          return [...cells, view];
+        }
+        return [...cells, i === 0 ? copy : ''];
+      });
+      // sessions already have a button on every row (and a failed first row can't hold one), so copy gets a row of its own
+      if (copy && rows.length && (g.key !== 'measurements' || g.rows[0].error)) rows.push([...g.columns.map(() => ''), copy]);
+      body.append(table(g.title, [...g.columns, ''], rows));
     }
   }
 
@@ -194,13 +219,6 @@ export function initMemory({
     say(`Showing the ${label.toLowerCase()} in the graph`);
   }
 
-  function viewMeasurements() {
-    const trend = data && measurementsTrend(data.measurements);
-    if (!trend || !confirmReplace('the saved measurements')) return;
-    showTrend(trend);
-    say('Showing the saved measurements in the graph');
-  }
-
   // Reading the counts is one quick command, so it runs on connect.
   async function loadSummary() {
     const meter = getMeter();
@@ -241,7 +259,6 @@ export function initMemory({
       }
       data = result;
       render();
-      viewButton.disabled = !measurementsTrend(result.measurements);
       say(`Done: ${summaryText(summary)}`);
     } catch (e) {
       say(`Could not read memory: ${e.message}`, true);
@@ -252,7 +269,6 @@ export function initMemory({
   }
 
   readButton.onclick = readAll;
-  viewButton.onclick = viewMeasurements;
 
   return {
     loadSummary,
@@ -261,7 +277,6 @@ export function initMemory({
       reader = readerMeter = null;
       body.replaceChildren();
       counts.textContent = '';
-      viewButton.disabled = true;
       sampleCache.clear();
       say('');
     },
